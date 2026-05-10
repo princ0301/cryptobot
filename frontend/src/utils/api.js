@@ -22,6 +22,7 @@ export const stopAgent         = () => api.post('/agent/stop')
 export const fetchHealth       = () => api.get('/health')
 export const fetchCoins        = () => api.get('/coins')
 export const addCoin           = (symbol) => api.post('/coins', { symbol })
+export const updateCoin        = (symbol, payload) => api.patch(`/coins/${symbol}`, payload)
 export const removeCoin        = (symbol) => api.delete(`/coins/${symbol}`)
 
 export default api

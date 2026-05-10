@@ -1,7 +1,21 @@
-import { Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Eye, EyeOff, Plus, RefreshCw, ShieldCheck, ShieldOff, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { addCoin, fetchCoins, removeCoin } from '../utils/api'
+import { addCoin, fetchCoins, removeCoin, updateCoin } from '../utils/api'
+
+
+function formatErrorDetail(detail) {
+  if (!detail) return ''
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item?.msg || item?.message || JSON.stringify(item)).join(', ')
+  }
+  if (typeof detail === 'object') {
+    const message = detail.message || 'Validation failed.'
+    const reasons = Array.isArray(detail.reasons) ? detail.reasons.join(' ') : ''
+    return [message, reasons].filter(Boolean).join(' ')
+  }
+  return detail
+}
 
 export default function CoinUniverseManager({ onChanged }) {
   const [pairs, setPairs] = useState([])
@@ -18,7 +32,7 @@ export default function CoinUniverseManager({ onChanged }) {
       setPairs(response.data?.pairs || [])
       setError('')
     } catch (err) {
-      setError(err.response?.data?.detail || err.message || 'Failed to load coins.')
+      setError(formatErrorDetail(err.response?.data?.detail) || err.message || 'Failed to load coins.')
     } finally {
       setLoading(false)
     }
@@ -45,11 +59,7 @@ export default function CoinUniverseManager({ onChanged }) {
       await loadPairs()
       onChanged?.()
     } catch (err) {
-      const detail = err.response?.data?.detail
-      const normalizedDetail = Array.isArray(detail)
-        ? detail.map((item) => item?.msg || item?.message || JSON.stringify(item)).join(', ')
-        : detail
-      setError(normalizedDetail || err.message || `Failed to add ${normalized}.`)
+      setError(formatErrorDetail(err.response?.data?.detail) || err.message || `Failed to add ${normalized}.`)
     } finally {
       setSaving(false)
     }
@@ -65,11 +75,23 @@ export default function CoinUniverseManager({ onChanged }) {
       await loadPairs()
       onChanged?.()
     } catch (err) {
-      const detail = err.response?.data?.detail
-      const normalizedDetail = Array.isArray(detail)
-        ? detail.map((item) => item?.msg || item?.message || JSON.stringify(item)).join(', ')
-        : detail
-      setError(normalizedDetail || err.message || `Failed to remove ${target}.`)
+      setError(formatErrorDetail(err.response?.data?.detail) || err.message || `Failed to remove ${target}.`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleUpdate = async (target, payload) => {
+    setSaving(true)
+    setError('')
+    setMessage('')
+    try {
+      const response = await updateCoin(target, payload)
+      setMessage(response.data?.message || `${target} updated.`)
+      await loadPairs()
+      onChanged?.()
+    } catch (err) {
+      setError(formatErrorDetail(err.response?.data?.detail) || err.message || `Failed to update ${target}.`)
     } finally {
       setSaving(false)
     }
@@ -127,7 +149,9 @@ export default function CoinUniverseManager({ onChanged }) {
 
       <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
         <span>{pairs.length} approved pairs</span>
-        <span>Backend-managed</span>
+        <span>
+          {pairs.filter((pair) => pair.watched).length} watched / {pairs.filter((pair) => pair.tradable).length} tradable
+        </span>
       </div>
 
       {loading ? (
@@ -146,17 +170,55 @@ export default function CoinUniverseManager({ onChanged }) {
               <div>
                 <div className="font-mono text-sm text-slate-200">{pair.symbol}</div>
                 <div className="text-xs text-slate-500">{pair.display}</div>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                      pair.watched ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'
+                    }`}
+                  >
+                    {pair.watched ? 'Watched' : 'Hidden'}
+                  </span>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                      pair.tradable ? 'bg-emerald-500/15 text-emerald-300' : 'bg-yellow-500/15 text-yellow-300'
+                    }`}
+                  >
+                    {pair.tradable ? 'Tradable' : 'Watch Only'}
+                  </span>
+                </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => handleRemove(pair.symbol)}
-                disabled={saving}
-                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
-                title={`Remove ${pair.symbol}`}
-              >
-                <Trash2 size={14} />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleUpdate(pair.symbol, { watched: !pair.watched })}
+                  disabled={saving}
+                  className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-blue-500/10 hover:text-blue-300 disabled:opacity-50"
+                  title={pair.watched ? `Hide ${pair.symbol} from watchlist` : `Add ${pair.symbol} to watchlist`}
+                >
+                  {pair.watched ? <Eye size={14} /> : <EyeOff size={14} />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleUpdate(pair.symbol, { tradable: !pair.tradable, watched: true })}
+                  disabled={saving}
+                  className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-emerald-500/10 hover:text-emerald-300 disabled:opacity-50"
+                  title={pair.tradable ? `Set ${pair.symbol} to watch only` : `Enable trading for ${pair.symbol}`}
+                >
+                  {pair.tradable ? <ShieldCheck size={14} /> : <ShieldOff size={14} />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleRemove(pair.symbol)}
+                  disabled={saving}
+                  className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
+                  title={`Remove ${pair.symbol}`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
           ))}
         </div>

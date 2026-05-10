@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agents.scheduler import is_running, run_now, start_scheduler, stop_scheduler
 from config import settings
-from data.coin_registry import load_trading_pairs
+from data.coin_registry import load_trading_pairs, load_watched_pairs
 from models.database import init_db
 from routes import agent, coins, live, market, performance, portfolio, trades
 
@@ -27,7 +27,8 @@ async def lifespan(_: FastAPI):
     logger.info("Paper balance: INR %.0f", settings.paper_starting_balance)
     logger.info("Trade interval: every %s minutes", settings.trade_interval_minutes)
     logger.info("AI model: %s", settings.groq_model)
-    logger.info("Trading pairs: %s", load_trading_pairs())
+    logger.info("Watched pairs: %s", load_watched_pairs())
+    logger.info("Tradable pairs: %s", load_trading_pairs())
 
     db_ready = init_db()
     if db_ready:
@@ -77,7 +78,8 @@ async def health():
         "paper_balance": settings.paper_starting_balance,
         "trade_interval": settings.trade_interval_minutes,
         "ai_model": settings.groq_model,
-        "coins": load_trading_pairs(),
+        "coins": load_watched_pairs(),
+        "tradable_coins": load_trading_pairs(),
     }
 
 
