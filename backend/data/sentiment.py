@@ -3,6 +3,8 @@ import logging
 import feedparser
 import httpx
 
+from config import settings
+
 logger = logging.getLogger(__name__)
 
 BULLISH_KEYWORDS = [
@@ -154,7 +156,7 @@ async def get_reddit_sentiment() -> dict:
 
     bullish_count = 0
     bearish_count = 0
-    high_risk = False
+    high_risk_hits = 0
     total_posts = 0
 
     for feed_url in feeds:
@@ -169,7 +171,7 @@ async def get_reddit_sentiment() -> dict:
                 if any(keyword in title for keyword in BEARISH_KEYWORDS):
                     bearish_count += 1
                 if any(keyword in title for keyword in HIGH_RISK_KEYWORDS):
-                    high_risk = True
+                    high_risk_hits += 1
         except Exception as exc:
             logger.warning("RSS parse error for %s: %s", feed_url, exc)
 
@@ -183,6 +185,11 @@ async def get_reddit_sentiment() -> dict:
 
     bull_pct = (bullish_count / total_posts) * 100
     bear_pct = (bearish_count / total_posts) * 100
+    high_risk_ratio = high_risk_hits / total_posts
+    high_risk_news = (
+        high_risk_hits >= settings.reddit_high_risk_min_hits
+        and high_risk_ratio >= settings.reddit_high_risk_min_ratio
+    )
 
     if bull_pct > 60:
         signal = "euphoric"
@@ -206,7 +213,9 @@ async def get_reddit_sentiment() -> dict:
         "bullish_posts": bullish_count,
         "bearish_posts": bearish_count,
         "total_posts": total_posts,
-        "high_risk_news": high_risk,
+        "high_risk_hits": high_risk_hits,
+        "high_risk_ratio": round(high_risk_ratio, 3),
+        "high_risk_news": high_risk_news,
         "source": "reddit_rss",
     }
 
@@ -231,13 +240,25 @@ async def get_combined_sentiment() -> dict:
         fg_opportunity = 20
 
     combined = (fg_opportunity * 0.40) + (reddit_score * 0.20) + (50 * 0.40)
+    elevated_news_risk = reddit.get("high_risk_news", False)
+    severe_reddit_signal = reddit.get("signal") in {"bearish", "panic"}
+    pause_trading = elevated_news_risk and (
+        fg_score <= settings.sentiment_pause_max_fg or severe_reddit_signal
+    )
 
     return {
         "combined_score": round(combined, 1),
         "fear_greed": fear_greed,
         "btc_dominance": dominance,
         "reddit": reddit,
-        "pause_trading": reddit.get("high_risk_news", False),
+        "pause_trading": pause_trading,
+        "news_risk_level": (
+            "pause"
+            if pause_trading
+            else "caution"
+            if elevated_news_risk
+            else "normal"
+        ),
         "btc_only_mode": dominance.get("signal") == "btc_dominant",
         "sentiment_label": (
             "Very Bullish Opportunity"

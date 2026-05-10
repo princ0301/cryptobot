@@ -21,6 +21,10 @@ STRICT RULES:
 5. If signals conflict or are unclear, respond with HOLD.
 6. Account for 30% Indian tax on profits in your reasoning.
 7. Be conservative. Missing a trade is better than taking a bad trade.
+8. Treat weak volume and cautionary news as risk penalties, not automatic blocks.
+9. Treat hard volume veto or explicit trading pause as strong blockers.
+10. When trend is uptrend, MACD is bullish, total score is strong, RSI is not extreme, and volume is weak but not vetoed, you may still recommend BUY if risk:reward remains favorable.
+11. Do not downgrade an otherwise strong setup to HOLD only because volume is weak when hard volume veto is false.
 
 Respond with this exact JSON structure:
 {
@@ -40,6 +44,25 @@ async def get_trading_decision(
     sentiment: dict,
     portfolio: dict,
 ) -> dict:
+    total_score = signal_scores.get("total", 0)
+    volume_veto = signal_scores.get("volume_veto", False)
+    weak_volume = signal_scores.get("weak_volume", False)
+    bullish_macd = signals.get("macd_crossover") in {"bullish", "bullish_continuation"}
+    rsi_value = float(signals.get("rsi", 50))
+    favorable_setup = (
+        signals.get("trend") == "uptrend"
+        and bullish_macd
+        and total_score >= 68
+        and rsi_value <= 68
+        and not volume_veto
+    )
+    caution_setup = (
+        signals.get("trend") == "uptrend"
+        and bullish_macd
+        and total_score >= 60
+        and not volume_veto
+    )
+
     user_message = f"""
 Analyze this market data and make a trading decision:
 
@@ -64,15 +87,20 @@ MACD Score: {signal_scores.get('breakdown', {}).get('macd', 0)}/20
 Volume Score: {signal_scores.get('breakdown', {}).get('volume', 0)}/10
 Support/Resistance Score: {signal_scores.get('breakdown', {}).get('support_resistance', 0)}/10
 TOTAL SCORE: {signal_scores.get('total', 0)}/90
-Volume Veto Active: {signal_scores.get('volume_veto', False)}
+Weak Volume: {signal_scores.get('weak_volume', False)}
+Hard Volume Veto Active: {signal_scores.get('volume_veto', False)}
 High Volatility: {signal_scores.get('high_volatility', False)} (ATR {signal_scores.get('atr_pct', 0):.2f}%)
+Favorable Setup Flag: {favorable_setup}
+Caution Setup Flag: {caution_setup}
 
 MARKET SENTIMENT
 Combined Sentiment Score: {sentiment.get('combined_score', 50)}/100 -> {sentiment.get('sentiment_label', 'Neutral')}
 Fear & Greed: {sentiment.get('fear_greed', {}).get('score', 50)} ({sentiment.get('fear_greed', {}).get('label', 'Neutral')})
 BTC Dominance: {sentiment.get('btc_dominance', {}).get('btc_dominance', 50):.1f}% -> {sentiment.get('btc_dominance', {}).get('signal', 'balanced')}
 Reddit Mood: {sentiment.get('reddit', {}).get('signal', 'neutral')}
-High Risk News Detected: {sentiment.get('pause_trading', False)}
+News Risk Level: {sentiment.get('news_risk_level', 'normal')}
+High Risk News Hits: {sentiment.get('reddit', {}).get('high_risk_hits', 0)} of {sentiment.get('reddit', {}).get('total_posts', 0)}
+Trading Pause Active: {sentiment.get('pause_trading', False)}
 
 PORTFOLIO
 Paper Balance: INR {portfolio.get('inr_balance', 100000):,.2f}
@@ -85,6 +113,12 @@ CONSTRAINTS
 - Maximum position: 25% = INR {portfolio.get('inr_balance', 100000) * 0.25:,.0f}
 - Minimum Risk:Reward ratio: 1:2
 - Tax: 30% on profits (already factored into TP levels)
+
+DECISION GUIDANCE
+- If Favorable Setup Flag is true, do not default to HOLD just because weak volume or cautionary news is present.
+- If Caution Setup Flag is true, require a clear reason before rejecting the setup.
+- Hard Volume Veto Active = true should be treated as a real blocker.
+- Overbought RSI above 72, downtrend, or poor risk:reward remain valid reasons to HOLD.
 """.strip()
 
     try:
@@ -99,7 +133,7 @@ CONSTRAINTS
         )
 
         raw = response.choices[0].message.content.strip()
-        logger.info("Groq raw response for %s: %s", pair, raw)
+        logger.debug("Groq raw response for %s: %s", pair, raw)
 
         decision = json.loads(raw)
         for field in ("action", "confidence", "reasoning"):
@@ -112,13 +146,13 @@ CONSTRAINTS
 
         if signal_scores.get("volume_veto") and decision["action"] == "BUY":
             decision["action"] = "HOLD"
-            decision["skip_reason"] = "Volume veto: trading volume is below average"
+            decision["skip_reason"] = "Hard volume veto: trading volume is too weak"
 
         if sentiment.get("pause_trading") and decision["action"] == "BUY":
             decision["action"] = "HOLD"
             decision["skip_reason"] = "High-risk news detected, pausing new entries"
 
-        logger.info("Decision for %s: %s (%s%%)", pair, decision["action"], decision.get("confidence", 0))
+        logger.debug("Decision for %s: %s (%s%%)", pair, decision["action"], decision.get("confidence", 0))
         return decision
     except json.JSONDecodeError as exc:
         logger.error("Groq returned invalid JSON for %s: %s", pair, exc)

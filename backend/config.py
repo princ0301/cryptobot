@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     scan_top_n: int = 8
     startup_scan_enabled: bool = True
     startup_trade_enabled: bool = False
+    min_volume_ratio_soft: float = 0.8
+    min_volume_ratio_hard: float = 0.55
+    reddit_high_risk_min_hits: int = 2
+    reddit_high_risk_min_ratio: float = 0.15
+    sentiment_pause_max_fg: int = 40
 
     tax_rate_percent: float = 30.0
     tds_rate_percent: float = 1.0

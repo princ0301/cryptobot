@@ -5,6 +5,7 @@ import pandas as pd
 import pandas_ta as _pandas_ta
 
 from agents.risk_manager import calculate_tax_adjusted_targets
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ def calculate_indicators(df: pd.DataFrame) -> Optional[pd.DataFrame]:
         enriched["volume_ma30"] = enriched["volume"].rolling(window=30).mean()
         enriched["volume_ratio"] = enriched["volume"] / enriched["volume_ma30"]
 
-        logger.info("Indicators calculated on %s candles", len(enriched))
+        logger.debug("Indicators calculated on %s candles", len(enriched))
         return enriched
     except Exception as exc:
         logger.error("Error calculating indicators: %s", exc)
@@ -94,7 +95,7 @@ def get_latest_signals(df: pd.DataFrame) -> Optional[dict]:
 
         if volume_ratio >= 1.3:
             volume_signal = "above_average"
-        elif volume_ratio >= 0.7:
+        elif volume_ratio >= settings.min_volume_ratio_soft:
             volume_signal = "average"
         else:
             volume_signal = "below_average"
@@ -150,6 +151,7 @@ def score_signals(signals: dict) -> dict:
             "total": 0,
             "tradeable": False,
             "volume_veto": True,
+            "weak_volume": True,
             "high_volatility": False,
             "atr_pct": 0,
             "breakdown": {
@@ -191,8 +193,10 @@ def score_signals(signals: dict) -> dict:
         volume_score = 10
     elif volume_ratio >= 1.1:
         volume_score = 7
-    elif volume_ratio >= 0.8:
+    elif volume_ratio >= settings.min_volume_ratio_soft:
         volume_score = 4
+    elif volume_ratio >= settings.min_volume_ratio_hard:
+        volume_score = 2
     else:
         volume_score = 0
 
@@ -208,7 +212,8 @@ def score_signals(signals: dict) -> dict:
         support_resistance_score = 0
 
     atr_pct = float(signals.get("atr_pct", 0))
-    volume_veto = volume_ratio < 0.8
+    weak_volume = volume_ratio < settings.min_volume_ratio_soft
+    volume_veto = volume_ratio < settings.min_volume_ratio_hard
     high_volatility = atr_pct >= 4.5
 
     total = ema_score + rsi_score + macd_score + volume_score + support_resistance_score
@@ -223,6 +228,7 @@ def score_signals(signals: dict) -> dict:
         "total": total,
         "tradeable": tradeable,
         "volume_veto": volume_veto,
+        "weak_volume": weak_volume,
         "high_volatility": high_volatility,
         "atr_pct": atr_pct,
         "breakdown": {

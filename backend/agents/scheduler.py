@@ -117,25 +117,26 @@ def _build_scan_shortlist(tradable_pairs: list[str], tickers: dict) -> list[str]
 async def run_agent_cycle(*, allow_trading: bool = True, cycle_label: str = "scheduled"):
     global agent_running
 
+    started_at = datetime.now(timezone.utc)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    logger.info("%s", "=" * 60)
-    logger.info("Agent cycle started (%s) - %s", cycle_label, now)
-    logger.info("%s", "=" * 60)
+    logger.info("Cycle start | type=%s | trading_enabled=%s | at=%s", cycle_label, allow_trading, now)
+    cycle_stats = {
+        "type": cycle_label,
+        "trading_enabled": allow_trading,
+        "selected_count": 0,
+        "analyzed": 0,
+        "buy": 0,
+        "hold": 0,
+        "skipped": 0,
+        "errors": 0,
+        "sentiment_paused": False,
+    }
 
     try:
-        logger.info("Fetching live prices")
         tickers = await get_all_tickers()
         if not tickers:
             logger.error("No ticker data available, skipping cycle")
             return
-
-        for ticker in tickers.values():
-            logger.info(
-                "%s: INR %.2f (%+.2f%%)",
-                ticker["display"],
-                ticker["price"],
-                ticker["change_24h"],
-            )
 
         portfolio = await get_paper_portfolio()
         open_count = await get_open_positions_count()
@@ -159,27 +160,24 @@ async def run_agent_cycle(*, allow_trading: bool = True, cycle_label: str = "sch
             logger.warning("Circuit breaker active: %s", breaker["reason"])
             return
 
-        logger.info("Fetching market sentiment")
         sentiment = await get_combined_sentiment()
         logger.info(
-            "Fear & Greed: %s (%s)",
+            "Market regime | fg=%s(%s) | btc_dom=%.1f%% | sentiment=%s/100(%s) | news_risk=%s",
             sentiment["fear_greed"]["score"],
             sentiment["fear_greed"]["label"],
-        )
-        logger.info(
-            "BTC Dominance: %.1f%%",
             sentiment["btc_dominance"]["btc_dominance"],
-        )
-        logger.info(
-            "Combined score: %s/100 - %s",
             sentiment["combined_score"],
             sentiment["sentiment_label"],
+            sentiment.get("news_risk_level", "normal"),
         )
 
         if sentiment.get("pause_trading"):
+            cycle_stats["sentiment_paused"] = True
             logger.warning("High-risk news detected, skipping new entries this cycle")
+        elif sentiment.get("news_risk_level") == "caution":
+            logger.info("Cautionary news detected, but trading remains enabled for strong setups")
         if not allow_trading:
-            logger.info("Trading is disabled for this cycle; scan will run in observation mode only")
+            logger.info("Observation mode active for this cycle")
 
         portfolio_context = {
             "inr_balance": inr_balance,
@@ -193,22 +191,49 @@ async def run_agent_cycle(*, allow_trading: bool = True, cycle_label: str = "sch
             return
 
         selected_pairs = _build_scan_shortlist(tradable_pairs, tickers)
+        cycle_stats["selected_count"] = len(selected_pairs)
         for pair in selected_pairs:
-            await analyze_coin(pair, tickers, sentiment, portfolio_context, allow_trading=allow_trading)
+            result = await analyze_coin(
+                pair,
+                tickers,
+                sentiment,
+                portfolio_context,
+                allow_trading=allow_trading,
+            )
+            cycle_stats["analyzed"] += 1
+            if result == "BUY":
+                cycle_stats["buy"] += 1
+            elif result == "HOLD":
+                cycle_stats["hold"] += 1
+            elif result == "SKIPPED":
+                cycle_stats["skipped"] += 1
+            elif result == "ERROR":
+                cycle_stats["errors"] += 1
             await asyncio.sleep(2)
 
-        logger.info("Agent cycle complete - %s", now)
+        duration = (datetime.now(timezone.utc) - started_at).total_seconds()
+        logger.info(
+            "Cycle summary | type=%s | trading_enabled=%s | selected=%s | analyzed=%s | buy=%s | hold=%s | skipped=%s | errors=%s | sentiment_paused=%s | duration=%.1fs",
+            cycle_stats["type"],
+            cycle_stats["trading_enabled"],
+            cycle_stats["selected_count"],
+            cycle_stats["analyzed"],
+            cycle_stats["buy"],
+            cycle_stats["hold"],
+            cycle_stats["skipped"],
+            cycle_stats["errors"],
+            cycle_stats["sentiment_paused"],
+            duration,
+        )
     except Exception as exc:
         logger.error("Agent cycle error: %s", exc, exc_info=True)
 
 
 async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dict, *, allow_trading: bool = True):
-    logger.info("Analyzing %s", pair)
-
     ticker = tickers.get(pair)
     if not ticker:
         logger.warning("No ticker for %s, skipping", pair)
-        return
+        return "SKIPPED"
 
     current_price = ticker["price"]
 
@@ -218,38 +243,23 @@ async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dic
             message = "Insufficient candle data"
             logger.warning("%s for %s, skipping", message, pair)
             await log_agent_cycle(pair, "SKIPPED", {}, sentiment, {}, current_price, message)
-            return
+            return "SKIPPED"
 
         df = calculate_indicators(df)
         if df is None:
             message = "Indicator calculation failed"
             logger.warning("%s for %s", message, pair)
             await log_agent_cycle(pair, "SKIPPED", {}, sentiment, {}, current_price, message)
-            return
+            return "SKIPPED"
 
         signals = get_latest_signals(df)
         if not signals:
             message = "Could not extract signals"
             logger.warning("%s for %s", message, pair)
             await log_agent_cycle(pair, "SKIPPED", {}, sentiment, {}, current_price, message)
-            return
-
-        logger.info(
-            "Trend: %s | RSI: %.1f | MACD: %s",
-            signals["trend"],
-            signals["rsi"],
-            signals["macd_crossover"],
-        )
-        logger.info(
-            "Volume: %.2fx avg | ATR: %.2f%%",
-            signals["volume_ratio"],
-            signals["atr_pct"],
-        )
+            return "SKIPPED"
 
         scores = score_signals(signals)
-        logger.info("Signal score: %s/90 | Tradeable: %s", scores["total"], scores["tradeable"])
-
-        logger.info("Requesting Groq decision")
         decision = await get_trading_decision(
             pair=pair,
             signals=signals,
@@ -261,38 +271,41 @@ async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dic
         action = decision.get("action", "HOLD")
         confidence = decision.get("confidence", 0)
         reasoning = decision.get("reasoning", "")
-
-        logger.info(
-            "Decision: %s | Confidence: %s%% | Risk: %s",
-            action,
-            confidence,
-            decision.get("risk_assessment", "unknown"),
-        )
-        logger.info("Reasoning: %s", reasoning[:100])
+        risk_level = decision.get("risk_assessment", "unknown")
 
         if action == "BUY" and confidence >= settings.min_confidence_threshold:
             if not allow_trading:
                 message = "Startup observation mode: trade execution disabled"
-                logger.info("Observation-only cycle, not opening %s despite BUY signal", pair)
+                logger.info(
+                    "Coin summary | %s | score=%s | trend=%s | rsi=%.1f | action=HOLD | conf=%s | risk=%s | reason=%s",
+                    pair,
+                    scores["total"],
+                    signals["trend"],
+                    signals["rsi"],
+                    confidence,
+                    risk_level,
+                    message,
+                )
                 await log_agent_cycle(pair, "HOLD", signals, sentiment, decision, current_price, message)
-                return
+                return "HOLD"
 
             open_count = portfolio.get("open_positions", 0)
             if open_count >= 3:
                 message = "Max positions reached"
-                logger.info("Max positions (3) reached, skipping %s", pair)
+                logger.info(
+                    "Coin summary | %s | score=%s | trend=%s | rsi=%.1f | action=SKIPPED | conf=%s | risk=%s | reason=%s",
+                    pair,
+                    scores["total"],
+                    signals["trend"],
+                    signals["rsi"],
+                    confidence,
+                    risk_level,
+                    message,
+                )
                 await log_agent_cycle(pair, "SKIPPED", signals, sentiment, decision, current_price, message)
-                return
+                return "SKIPPED"
 
             trade_levels = calculate_trade_levels(signals, confidence)
-            logger.info(
-                "Entry: INR %.2f | SL: INR %.2f | TP1: INR %.2f | TP2: INR %.2f",
-                trade_levels["entry"],
-                trade_levels["stop_loss"],
-                trade_levels["tp1_with_tax"],
-                trade_levels["tp2_with_tax"],
-            )
-            logger.info("R:R = %s", trade_levels["risk_reward_1"])
 
             trade = await open_paper_trade(
                 pair=pair,
@@ -305,21 +318,47 @@ async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dic
 
             if trade:
                 logger.info(
-                    "Trade opened. ID: %s | Position: INR %.2f | Qty: %.6f",
+                    "Coin summary | %s | score=%s | trend=%s | rsi=%.1f | action=BUY | conf=%s | risk=%s | trade_id=%s | rr=%s",
+                    pair,
+                    scores["total"],
+                    signals["trend"],
+                    signals["rsi"],
+                    confidence,
+                    risk_level,
                     trade.get("trade_id"),
-                    trade.get("position_inr", 0),
-                    trade.get("quantity", 0),
+                    trade_levels["risk_reward_1"],
+                )
+            else:
+                logger.info(
+                    "Coin summary | %s | score=%s | trend=%s | rsi=%.1f | action=SKIPPED | conf=%s | risk=%s | reason=trade_open_failed",
+                    pair,
+                    scores["total"],
+                    signals["trend"],
+                    signals["rsi"],
+                    confidence,
+                    risk_level,
                 )
 
             await log_agent_cycle(pair, "BUY", signals, sentiment, decision, current_price)
-            return
+            return "BUY"
 
         skip_reason = decision.get("skip_reason", f"Action={action}, Confidence={confidence}%")
-        logger.info("Hold for %s: %s", pair, skip_reason)
+        logger.info(
+            "Coin summary | %s | score=%s | trend=%s | rsi=%.1f | action=HOLD | conf=%s | risk=%s | reason=%s",
+            pair,
+            scores["total"],
+            signals["trend"],
+            signals["rsi"],
+            confidence,
+            risk_level,
+            skip_reason,
+        )
         await log_agent_cycle(pair, "HOLD", signals, sentiment, decision, current_price, skip_reason)
+        return "HOLD"
     except Exception as exc:
         logger.error("Error analyzing %s: %s", pair, exc, exc_info=True)
         await log_agent_cycle(pair, "SKIPPED", {}, sentiment, {}, current_price, str(exc))
+        return "ERROR"
 
 
 async def monitor_positions():

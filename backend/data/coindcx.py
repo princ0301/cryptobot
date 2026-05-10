@@ -101,7 +101,7 @@ async def get_ohlcv(pair: str, interval: str = "1h", limit: int = 200) -> pd.Dat
         df["time"] = pd.to_datetime(df["time"], unit="ms")
         df = df.sort_values("time").reset_index(drop=True)
 
-        logger.info("Fetched %s candles for %s (%s)", len(df), pair, interval)
+        logger.debug("Fetched %s candles for %s (%s)", len(df), pair, interval)
         return df
     except Exception as exc:
         logger.error("Error fetching OHLCV for %s: %s", pair, exc)
