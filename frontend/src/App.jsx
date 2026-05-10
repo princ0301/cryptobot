@@ -33,7 +33,6 @@ const TABS = [
   { id: 'live', label: 'Live Mode', icon: <Lock size={14} /> },
 ]
 
-const DEFAULT_VISIBLE_PAIRS = ['BTCINR', 'ETHINR', 'BNBINR']
 const DEFAULT_CARD_COUNT = 3
 
 export default function App() {
@@ -61,7 +60,11 @@ export default function App() {
     () => [...new Set(openPositionsList.map((position) => position.coin).filter(Boolean))],
     [openPositionsList],
   )
-  const availableCoins = health?.coins?.length ? health.coins : DEFAULT_VISIBLE_PAIRS
+  const availableCoins = health?.coins?.length
+    ? health.coins
+    : Object.values(priceData)
+        .map((item) => item?.market)
+        .filter(Boolean)
   const visibleCoins = useMemo(
     () => availableCoins.slice(0, Math.min(DEFAULT_CARD_COUNT, availableCoins.length)),
     [availableCoins],

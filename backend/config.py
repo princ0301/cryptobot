@@ -1,6 +1,20 @@
+import json
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+COINS_FILE = Path(__file__).resolve().parent / "data" / "coins.json"
+
+
+def load_trading_pairs() -> list[str]:
+    try:
+        payload = json.loads(COINS_FILE.read_text(encoding="utf-8"))
+        pairs = payload.get("pairs", [])
+        return [pair["symbol"] for pair in pairs if pair.get("symbol")]
+    except Exception:
+        return ["BTCINR", "ETHINR", "BNBINR"]
 
 
 class Settings(BaseSettings):
@@ -36,7 +50,7 @@ class Settings(BaseSettings):
     max_drawdown_allowed: float = 15.0
     min_profit_factor: float = 1.5
 
-    trading_pairs: list[str] = ["BTCINR", "ETHINR", "BNBINR"]
+    trading_pairs: list[str] = load_trading_pairs()
 
     model_config = SettingsConfigDict(
         env_file=".env",

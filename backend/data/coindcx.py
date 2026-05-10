@@ -3,6 +3,7 @@ import hmac
 import json
 import logging
 import time
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -15,11 +16,31 @@ logger = logging.getLogger(__name__)
 COINDCX_BASE = "https://api.coindcx.com"
 PUBLIC_BASE = "https://public.coindcx.com"
 
-PAIR_MAP = {
-    "BTCINR": {"candle_pair": "I-BTC_INR", "display": "BTC/INR"},
-    "ETHINR": {"candle_pair": "I-ETH_INR", "display": "ETH/INR"},
-    "BNBINR": {"candle_pair": "I-BNB_INR", "display": "BNB/INR"},
-}
+COINS_FILE = Path(__file__).resolve().parent / "coins.json"
+
+
+def _load_pair_map() -> dict[str, dict[str, str]]:
+    try:
+        payload = json.loads(COINS_FILE.read_text(encoding="utf-8"))
+        pairs = payload.get("pairs", [])
+        return {
+            pair["symbol"]: {
+                "candle_pair": pair["candle_pair"],
+                "display": pair["display"],
+            }
+            for pair in pairs
+            if pair.get("symbol") and pair.get("candle_pair") and pair.get("display")
+        }
+    except Exception as exc:
+        logger.warning("Failed to load coins.json, using built-in defaults: %s", exc)
+        return {
+            "BTCINR": {"candle_pair": "I-BTC_INR", "display": "BTC/INR"},
+            "ETHINR": {"candle_pair": "I-ETH_INR", "display": "ETH/INR"},
+            "BNBINR": {"candle_pair": "I-BNB_INR", "display": "BNB/INR"},
+        }
+
+
+PAIR_MAP = _load_pair_map()
 
 
 def _auth_headers(body: dict) -> dict:
