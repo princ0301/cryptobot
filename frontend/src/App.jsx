@@ -1,9 +1,10 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Activity, BarChart2, Bot, List, Lock } from 'lucide-react'
 
 import AgentThinking from './components/AgentThinking'
 import CriteriaTracker from './components/CriteriaTracker'
 import LatestBuyCard from './components/LatestBuyCard'
+import MarketExplorer from './components/MarketExplorer'
 import OpenPositions from './components/OpenPositions'
 import PortfolioChart from './components/PortfolioChart'
 import PortfolioSummary from './components/PortfolioSummary'
@@ -14,6 +15,7 @@ import { usePolling } from './hooks/usePolling'
 import {
   fetchAgentStatus,
   fetchCriteria,
+  fetchHealth,
   fetchLastAnalysis,
   fetchOpenPositions,
   fetchPortfolio,
@@ -27,10 +29,12 @@ const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: <Activity size={14} /> },
   { id: 'trades', label: 'Trades', icon: <List size={14} /> },
   { id: 'portfolio', label: 'Portfolio', icon: <BarChart2 size={14} /> },
+  { id: 'market', label: 'Market', icon: <Activity size={14} /> },
   { id: 'live', label: 'Live Mode', icon: <Lock size={14} /> },
 ]
 
-const COIN_PAIRS = ['BTCINR', 'ETHINR', 'BNBINR']
+const DEFAULT_VISIBLE_PAIRS = ['BTCINR', 'ETHINR', 'BNBINR']
+const DEFAULT_CARD_COUNT = 3
 
 export default function App() {
   const [tab, setTab] = useState('dashboard')
@@ -43,6 +47,7 @@ export default function App() {
   const { data: positions } = usePolling(useCallback(() => fetchOpenPositions(), []), 15000)
   const { data: criteria } = usePolling(useCallback(() => fetchCriteria(), []), 60000)
   const { data: status } = usePolling(useCallback(() => fetchAgentStatus(), []), 30000)
+  const { data: health } = usePolling(useCallback(() => fetchHealth(), []), 60000)
   const { data: analyses, refetch: refetchAnalyses } = usePolling(
     useCallback(() => fetchLastAnalysis(), []),
     30000,
@@ -52,6 +57,15 @@ export default function App() {
   const liveModeUnlocked = criteria?.live_mode_unlocked || false
   const openPositionsList = positions?.positions || []
   const latestPosition = openPositionsList[0] || null
+  const openCoins = useMemo(
+    () => [...new Set(openPositionsList.map((position) => position.coin).filter(Boolean))],
+    [openPositionsList],
+  )
+  const availableCoins = health?.coins?.length ? health.coins : DEFAULT_VISIBLE_PAIRS
+  const visibleCoins = useMemo(
+    () => availableCoins.slice(0, Math.min(DEFAULT_CARD_COUNT, availableCoins.length)),
+    [availableCoins],
+  )
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -104,8 +118,8 @@ export default function App() {
       <main className="mx-auto max-w-7xl space-y-5 px-4 py-5">
         {tab === 'dashboard' && (
           <>
-            <div className="grid grid-cols-3 gap-3">
-              {COIN_PAIRS.map((coin) => (
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+              {visibleCoins.map((coin) => (
                 <PriceCard key={coin} coin={coin} data={priceData[coin]} />
               ))}
             </div>
@@ -153,6 +167,10 @@ export default function App() {
               </div>
             </div>
           </div>
+        )}
+
+        {tab === 'market' && (
+          <MarketExplorer coins={availableCoins} priceData={priceData} openCoins={openCoins} />
         )}
 
         {tab === 'live' && (
