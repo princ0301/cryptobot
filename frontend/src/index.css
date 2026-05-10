@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+/* Pulse animation for live dot */
+@keyframes livepulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.live-pulse { animation: livepulse 1.2s ease-in-out infinite; }
+
+/* Smooth number transitions */
+.num-transition { transition: all 0.3s ease; }
