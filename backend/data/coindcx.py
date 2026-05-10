@@ -3,44 +3,18 @@ import hmac
 import json
 import logging
 import time
-from pathlib import Path
 from typing import Optional
 
 import httpx
 import pandas as pd
 
 from config import settings
+from data.coin_registry import load_pair_map
 
 logger = logging.getLogger(__name__)
 
 COINDCX_BASE = "https://api.coindcx.com"
 PUBLIC_BASE = "https://public.coindcx.com"
-
-COINS_FILE = Path(__file__).resolve().parent / "coins.json"
-
-
-def _load_pair_map() -> dict[str, dict[str, str]]:
-    try:
-        payload = json.loads(COINS_FILE.read_text(encoding="utf-8"))
-        pairs = payload.get("pairs", [])
-        return {
-            pair["symbol"]: {
-                "candle_pair": pair["candle_pair"],
-                "display": pair["display"],
-            }
-            for pair in pairs
-            if pair.get("symbol") and pair.get("candle_pair") and pair.get("display")
-        }
-    except Exception as exc:
-        logger.warning("Failed to load coins.json, using built-in defaults: %s", exc)
-        return {
-            "BTCINR": {"candle_pair": "I-BTC_INR", "display": "BTC/INR"},
-            "ETHINR": {"candle_pair": "I-ETH_INR", "display": "ETH/INR"},
-            "BNBINR": {"candle_pair": "I-BNB_INR", "display": "BNB/INR"},
-        }
-
-
-PAIR_MAP = _load_pair_map()
 
 
 def _auth_headers(body: dict) -> dict:
@@ -58,6 +32,8 @@ def _auth_headers(body: dict) -> dict:
 
 
 async def get_all_tickers() -> dict:
+    pair_map = load_pair_map()
+
     async with httpx.AsyncClient(timeout=10) as client:
         response = await client.get(f"{COINDCX_BASE}/exchange/ticker")
         response.raise_for_status()
@@ -66,10 +42,10 @@ async def get_all_tickers() -> dict:
     result = {}
     for ticker in tickers:
         market = ticker.get("market", "")
-        if market in PAIR_MAP:
+        if market in pair_map:
             result[market] = {
                 "market": market,
-                "display": PAIR_MAP[market]["display"],
+                "display": pair_map[market]["display"],
                 "price": float(ticker.get("last_price", 0)),
                 "change_24h": float(ticker.get("change_24_hour", 0)),
                 "high_24h": float(ticker.get("high", 0)),
@@ -88,12 +64,13 @@ async def get_ticker(pair: str) -> Optional[dict]:
 
 
 async def get_ohlcv(pair: str, interval: str = "1h", limit: int = 200) -> pd.DataFrame:
-    if pair not in PAIR_MAP:
-        raise ValueError(f"Unknown pair: {pair}. Valid pairs: {list(PAIR_MAP)}")
+    pair_map = load_pair_map()
+    if pair not in pair_map:
+        raise ValueError(f"Unknown pair: {pair}. Valid pairs: {list(pair_map)}")
 
     url = f"{PUBLIC_BASE}/market_data/candles"
     params = {
-        "pair": PAIR_MAP[pair]["candle_pair"],
+        "pair": pair_map[pair]["candle_pair"],
         "interval": interval,
         "limit": limit,
     }
@@ -127,6 +104,29 @@ async def get_ohlcv(pair: str, interval: str = "1h", limit: int = 200) -> pd.Dat
     except Exception as exc:
         logger.error("Error fetching OHLCV for %s: %s", pair, exc)
         return pd.DataFrame()
+
+
+async def get_inr_market_details(symbol: str) -> Optional[dict]:
+    symbol = symbol.upper().strip()
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.get(f"{COINDCX_BASE}/exchange/v1/markets_details")
+        response.raise_for_status()
+        markets = response.json()
+
+    for market in markets:
+        if (
+            market.get("symbol") == symbol
+            and market.get("ecode") == "I"
+            and market.get("status") == "active"
+        ):
+            asset = market.get("target_currency_short_name", symbol.replace("INR", ""))
+            return {
+                "symbol": symbol,
+                "display": f"{asset}/INR",
+                "candle_pair": market.get("pair"),
+            }
+
+    return None
 
 
 async def get_account_balance() -> dict:

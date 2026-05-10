@@ -20,5 +20,8 @@ export const triggerCycle      = () => api.post('/agent/run-now')
 export const startAgent        = () => api.post('/agent/start')
 export const stopAgent         = () => api.post('/agent/stop')
 export const fetchHealth       = () => api.get('/health')
+export const fetchCoins        = () => api.get('/coins')
+export const addCoin           = (symbol) => api.post('/coins', { symbol })
+export const removeCoin        = (symbol) => api.delete(`/coins/${symbol}`)
 
 export default api

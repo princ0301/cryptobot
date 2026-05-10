@@ -1,20 +1,8 @@
-import json
 from functools import lru_cache
-from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
-COINS_FILE = Path(__file__).resolve().parent / "data" / "coins.json"
-
-
-def load_trading_pairs() -> list[str]:
-    try:
-        payload = json.loads(COINS_FILE.read_text(encoding="utf-8"))
-        pairs = payload.get("pairs", [])
-        return [pair["symbol"] for pair in pairs if pair.get("symbol")]
-    except Exception:
-        return ["BTCINR", "ETHINR", "BNBINR"]
+from data.coin_registry import load_trading_pairs
 
 
 class Settings(BaseSettings):

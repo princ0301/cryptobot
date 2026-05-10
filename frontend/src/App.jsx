@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { Activity, BarChart2, Bot, List, Lock } from 'lucide-react'
 
 import AgentThinking from './components/AgentThinking'
+import CoinUniverseManager from './components/CoinUniverseManager'
 import CriteriaTracker from './components/CriteriaTracker'
 import LatestBuyCard from './components/LatestBuyCard'
 import MarketExplorer from './components/MarketExplorer'
@@ -38,7 +39,7 @@ const DEFAULT_CARD_COUNT = 3
 export default function App() {
   const [tab, setTab] = useState('dashboard')
 
-  const { data: prices } = usePolling(useCallback(() => fetchPrices(), []), 15000)
+  const { data: prices, refetch: refetchPrices } = usePolling(useCallback(() => fetchPrices(), []), 15000)
   const { data: sentiment } = usePolling(useCallback(() => fetchSentiment(), []), 60000)
   const { data: portfolio } = usePolling(useCallback(() => fetchPortfolio(), []), 20000)
   const { data: history } = usePolling(useCallback(() => fetchPortfolioHistory(), []), 120000)
@@ -46,7 +47,7 @@ export default function App() {
   const { data: positions } = usePolling(useCallback(() => fetchOpenPositions(), []), 15000)
   const { data: criteria } = usePolling(useCallback(() => fetchCriteria(), []), 60000)
   const { data: status } = usePolling(useCallback(() => fetchAgentStatus(), []), 30000)
-  const { data: health } = usePolling(useCallback(() => fetchHealth(), []), 60000)
+  const { data: health, refetch: refetchHealth } = usePolling(useCallback(() => fetchHealth(), []), 60000)
   const { data: analyses, refetch: refetchAnalyses } = usePolling(
     useCallback(() => fetchLastAnalysis(), []),
     30000,
@@ -69,6 +70,10 @@ export default function App() {
     () => availableCoins.slice(0, Math.min(DEFAULT_CARD_COUNT, availableCoins.length)),
     [availableCoins],
   )
+  const handleCoinsChanged = useCallback(() => {
+    refetchHealth()
+    refetchPrices()
+  }, [refetchHealth, refetchPrices])
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -173,7 +178,14 @@ export default function App() {
         )}
 
         {tab === 'market' && (
-          <MarketExplorer coins={availableCoins} priceData={priceData} openCoins={openCoins} />
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div className="xl:col-span-2">
+              <MarketExplorer coins={availableCoins} priceData={priceData} openCoins={openCoins} />
+            </div>
+            <div>
+              <CoinUniverseManager onChanged={handleCoinsChanged} />
+            </div>
+          </div>
         )}
 
         {tab === 'live' && (

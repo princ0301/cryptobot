@@ -16,6 +16,7 @@ from agents.llm import get_trading_decision
 from agents.performance import log_agent_cycle, recalculate_performance
 from agents.risk_manager import check_circuit_breaker
 from config import settings
+from data.coin_registry import load_trading_pairs
 from data.coindcx import get_all_tickers, get_ohlcv
 from data.sentiment import get_combined_sentiment
 
@@ -96,7 +97,7 @@ async def run_agent_cycle():
             "open_positions": open_count,
         }
 
-        for pair in settings.trading_pairs:
+        for pair in load_trading_pairs():
             await analyze_coin(pair, tickers, sentiment, portfolio_context)
             await asyncio.sleep(2)
 

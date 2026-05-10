@@ -1,8 +1,8 @@
 import logging
 
-from data.coindcx import PAIR_MAP
-from models.database import get_db
 from config import settings
+from data.coin_registry import load_pair_map
+from models.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ def _db():
 
 
 def _coin_label(coin: str) -> str:
-    return PAIR_MAP.get(coin, {}).get("display", coin)
+    return load_pair_map().get(coin, {}).get("display", coin)
 
 
 async def recalculate_performance() -> dict:

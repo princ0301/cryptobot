@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 import httpx
 import logging
 
-from data.coindcx import PAIR_MAP
+from data.coin_registry import load_pair_map
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -12,8 +12,9 @@ COINDCX_BASE = "https://api.coindcx.com"
 
 @router.get("/prices")
 async def get_live_prices():
-    """Get live prices for BTC/INR, ETH/INR, BNB/INR from CoinDCX."""
+    """Get live prices for configured INR markets from CoinDCX."""
     try:
+        pair_map = load_pair_map()
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(f"{COINDCX_BASE}/exchange/ticker")
             response.raise_for_status()
@@ -22,10 +23,10 @@ async def get_live_prices():
         prices = {}
         for ticker in tickers:
             market = ticker.get("market", "")
-            if market in PAIR_MAP:
+            if market in pair_map:
                 prices[market] = {
                     "market":     market,
-                    "display":    PAIR_MAP[market]["display"],
+                    "display":    pair_map[market]["display"],
                     "price":      float(ticker.get("last_price", 0)),
                     "change_24h": float(ticker.get("change_24_hour", 0)),
                     "high_24h":   float(ticker.get("high", 0)),
