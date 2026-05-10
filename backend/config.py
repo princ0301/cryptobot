@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     max_position_percent: float = 25.0
     min_confidence_threshold: float = 65.0
     trade_interval_minutes: int = 60
+    scan_top_n: int = 8
 
     tax_rate_percent: float = 30.0
     tds_rate_percent: float = 1.0
@@ -39,6 +40,7 @@ class Settings(BaseSettings):
     min_profit_factor: float = 1.5
 
     trading_pairs: list[str] = load_trading_pairs()
+    core_trading_pairs: list[str] = ["BTCINR", "ETHINR", "SOLINR"]
 
     model_config = SettingsConfigDict(
         env_file=".env",

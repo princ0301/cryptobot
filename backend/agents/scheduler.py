@@ -26,6 +26,79 @@ scheduler = AsyncIOScheduler()
 agent_running = False
 
 
+def _rank_candidate_pairs(tradable_pairs: list[str], tickers: dict) -> list[str]:
+    ranked = []
+    for pair in tradable_pairs:
+        ticker = tickers.get(pair)
+        if not ticker:
+            continue
+
+        price = float(ticker.get("price", 0) or 0)
+        volume = float(ticker.get("volume", 0) or 0)
+        bid = float(ticker.get("bid", 0) or 0)
+        ask = float(ticker.get("ask", 0) or 0)
+        change_24h = float(ticker.get("change_24h", 0) or 0)
+
+        notional_volume = price * volume
+        spread_pct = ((ask - bid) / ask * 100) if ask > 0 and bid > 0 and ask >= bid else 99.0
+        momentum_score = min(abs(change_24h), 25.0) * 50000
+        spread_penalty = spread_pct * 250000
+        ranking_score = notional_volume + momentum_score - spread_penalty
+
+        ranked.append(
+            {
+                "pair": pair,
+                "score": ranking_score,
+                "notional_volume": notional_volume,
+                "change_24h": change_24h,
+                "spread_pct": spread_pct,
+            }
+        )
+
+    ranked.sort(
+        key=lambda item: (
+            item["score"],
+            item["notional_volume"],
+            abs(item["change_24h"]),
+        ),
+        reverse=True,
+    )
+    return ranked
+
+
+def _build_scan_shortlist(tradable_pairs: list[str], tickers: dict) -> list[str]:
+    ranked = _rank_candidate_pairs(tradable_pairs, tickers)
+    core_pairs = [pair for pair in settings.core_trading_pairs if pair in tradable_pairs]
+    shortlist = []
+
+    for pair in core_pairs:
+        if pair not in shortlist:
+            shortlist.append(pair)
+
+    for item in ranked:
+        pair = item["pair"]
+        if pair not in shortlist:
+            shortlist.append(pair)
+        if len(shortlist) >= max(settings.scan_top_n, len(core_pairs)):
+            break
+
+    logger.info(
+        "Ranked scan shortlist: %s",
+        [
+            {
+                "pair": item["pair"],
+                "score": round(item["score"], 2),
+                "vol_inr": round(item["notional_volume"], 2),
+                "change_24h": round(item["change_24h"], 2),
+                "spread_pct": round(item["spread_pct"], 3),
+            }
+            for item in ranked[: min(len(ranked), settings.scan_top_n)]
+        ],
+    )
+    logger.info("Selected pairs for this cycle: %s", shortlist)
+    return shortlist
+
+
 async def run_agent_cycle():
     global agent_running
 
@@ -97,7 +170,13 @@ async def run_agent_cycle():
             "open_positions": open_count,
         }
 
-        for pair in load_trading_pairs():
+        tradable_pairs = load_trading_pairs()
+        if not tradable_pairs:
+            logger.warning("No tradable pairs configured, skipping cycle")
+            return
+
+        selected_pairs = _build_scan_shortlist(tradable_pairs, tickers)
+        for pair in selected_pairs:
             await analyze_coin(pair, tickers, sentiment, portfolio_context)
             await asyncio.sleep(2)
 
@@ -265,6 +344,8 @@ def start_scheduler():
     agent_running = True
     logger.info("Scheduler started")
     logger.info("Trading cycle: every %s minutes", settings.trade_interval_minutes)
+    logger.info("Ranked scan: top %s tradable pairs per cycle", settings.scan_top_n)
+    logger.info("Core scan pairs: %s", settings.core_trading_pairs)
     logger.info("Position monitor: every 15 minutes")
     logger.info("Performance update: every 6 hours")
 
