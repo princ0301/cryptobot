@@ -1,7 +1,7 @@
-import { Eye, EyeOff, Plus, RefreshCw, ShieldCheck, ShieldOff, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Eye, EyeOff, Plus, RefreshCw, Search, ShieldCheck, ShieldOff, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
-import { addCoin, fetchCoins, removeCoin, updateCoin } from '../utils/api'
+import { addCoin, fetchCoins, removeCoin, searchCoins, updateCoin } from '../utils/api'
 
 
 function formatErrorDetail(detail) {
@@ -24,6 +24,10 @@ export default function CoinUniverseManager({ onChanged }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [suggestions, setSuggestions] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const searchTimeoutRef = useRef(null)
 
   const loadPairs = async () => {
     try {
@@ -42,6 +46,38 @@ export default function CoinUniverseManager({ onChanged }) {
     loadPairs()
   }, [])
 
+  useEffect(() => {
+    const query = symbol.trim()
+    if (searchTimeoutRef.current) {
+      window.clearTimeout(searchTimeoutRef.current)
+    }
+
+    if (!query) {
+      setSuggestions([])
+      setSearching(false)
+      return
+    }
+
+    searchTimeoutRef.current = window.setTimeout(async () => {
+      setSearching(true)
+      try {
+        const response = await searchCoins(query)
+        setSuggestions(response.data?.suggestions || [])
+        setShowSuggestions(true)
+      } catch {
+        setSuggestions([])
+      } finally {
+        setSearching(false)
+      }
+    }, 200)
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        window.clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [symbol])
+
   const handleAdd = async (event) => {
     event.preventDefault()
     const normalized = symbol.trim().toUpperCase()
@@ -56,6 +92,8 @@ export default function CoinUniverseManager({ onChanged }) {
       const response = await addCoin(normalized)
       setMessage(response.data?.message || `${normalized} added.`)
       setSymbol('')
+      setSuggestions([])
+      setShowSuggestions(false)
       await loadPairs()
       onChanged?.()
     } catch (err) {
@@ -97,6 +135,11 @@ export default function CoinUniverseManager({ onChanged }) {
     }
   }
 
+  const handleSelectSuggestion = (suggestion) => {
+    setSymbol(suggestion.symbol)
+    setShowSuggestions(false)
+  }
+
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -118,13 +161,46 @@ export default function CoinUniverseManager({ onChanged }) {
       </div>
 
       <form onSubmit={handleAdd} className="mb-4 flex gap-2">
-        <input
-          type="text"
-          value={symbol}
-          onChange={(event) => setSymbol(event.target.value.toUpperCase())}
-          placeholder="Add coin, e.g. VELO or VELOINR"
-          className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 outline-none placeholder:text-slate-500 focus:border-indigo-500"
-        />
+        <div className="relative flex-1">
+          <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 focus-within:border-indigo-500">
+            <Search size={14} className="text-slate-500" />
+            <input
+              type="text"
+              value={symbol}
+              onChange={(event) => setSymbol(event.target.value.toUpperCase())}
+              onFocus={() => setShowSuggestions(true)}
+              placeholder="Search coin, e.g. VELO, APT, OSMO"
+              className="w-full bg-transparent text-sm text-slate-200 outline-none placeholder:text-slate-500"
+            />
+          </div>
+
+          {showSuggestions && (symbol.trim() || suggestions.length > 0) && (
+            <div className="absolute z-20 mt-2 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-700 bg-slate-950/98 shadow-2xl">
+              {searching ? (
+                <div className="px-3 py-2 text-xs text-slate-500">Searching CoinDCX markets...</div>
+              ) : suggestions.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-slate-500">No active INR matches found.</div>
+              ) : (
+                suggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.symbol}
+                    type="button"
+                    onClick={() => handleSelectSuggestion(suggestion)}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left transition-colors hover:bg-slate-800/80"
+                  >
+                    <div>
+                      <div className="font-mono text-sm text-slate-200">{suggestion.symbol}</div>
+                      <div className="text-xs text-slate-500">{suggestion.display}</div>
+                    </div>
+                    <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
+                      {suggestion.asset}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
         <button
           type="submit"
           disabled={saving}

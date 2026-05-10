@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 COINDCX_BASE = "https://api.coindcx.com"
 PUBLIC_BASE = "https://public.coindcx.com"
+MARKETS_CACHE_TTL_SECONDS = 300
+_markets_cache: dict[str, object] = {"fetched_at": 0.0, "markets": []}
 
 
 def _auth_headers(body: dict) -> dict:
@@ -108,17 +110,10 @@ async def get_ohlcv(pair: str, interval: str = "1h", limit: int = 200) -> pd.Dat
 
 async def get_inr_market_details(symbol: str) -> Optional[dict]:
     symbol = symbol.upper().strip()
-    async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.get(f"{COINDCX_BASE}/exchange/v1/markets_details")
-        response.raise_for_status()
-        markets = response.json()
+    markets = await get_active_inr_markets()
 
     for market in markets:
-        if (
-            market.get("symbol") == symbol
-            and market.get("ecode") == "I"
-            and market.get("status") == "active"
-        ):
+        if market.get("symbol") == symbol:
             asset = market.get("target_currency_short_name", symbol.replace("INR", ""))
             return {
                 "symbol": symbol,
@@ -127,6 +122,74 @@ async def get_inr_market_details(symbol: str) -> Optional[dict]:
             }
 
     return None
+
+
+async def get_active_inr_markets() -> list[dict]:
+    now = time.time()
+    cached_markets = _markets_cache.get("markets", [])
+    fetched_at = float(_markets_cache.get("fetched_at", 0.0) or 0.0)
+
+    if cached_markets and (now - fetched_at) < MARKETS_CACHE_TTL_SECONDS:
+        return list(cached_markets)
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        response = await client.get(f"{COINDCX_BASE}/exchange/v1/markets_details")
+        response.raise_for_status()
+        markets = response.json()
+
+    filtered = [
+        market
+        for market in markets
+        if market.get("ecode") == "I" and market.get("status") == "active"
+    ]
+    _markets_cache["markets"] = filtered
+    _markets_cache["fetched_at"] = now
+    return list(filtered)
+
+
+async def search_inr_markets(query: str, limit: int = 10) -> list[dict[str, str]]:
+    normalized = query.upper().strip()
+    if not normalized:
+        return []
+
+    markets = await get_active_inr_markets()
+    suggestions = []
+    for market in markets:
+        symbol = str(market.get("symbol", "")).upper()
+        asset = str(market.get("target_currency_short_name", "")).upper()
+        display = f"{asset}/INR" if asset else symbol
+
+        haystacks = [symbol, asset, display.upper()]
+        if not any(normalized in value for value in haystacks):
+            continue
+
+        rank = 0
+        if symbol == normalized or asset == normalized:
+            rank = 0
+        elif symbol.startswith(normalized) or asset.startswith(normalized):
+            rank = 1
+        else:
+            rank = 2
+
+        suggestions.append(
+            {
+                "symbol": symbol,
+                "display": display,
+                "candle_pair": str(market.get("pair", "")),
+                "asset": asset,
+                "_rank": rank,
+            }
+        )
+
+    suggestions.sort(key=lambda item: (item["_rank"], item["symbol"]))
+    return [
+        {
+            "symbol": item["symbol"],
+            "display": item["display"],
+            "asset": item["asset"],
+        }
+        for item in suggestions[:limit]
+    ]
 
 
 async def get_account_balance() -> dict:

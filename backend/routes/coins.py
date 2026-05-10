@@ -1,11 +1,11 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from data.coin_registry import load_coin_pairs, save_coin_pairs
-from data.coindcx import get_inr_market_details, get_ohlcv, get_ticker
+from data.coindcx import get_inr_market_details, get_ohlcv, get_ticker, search_inr_markets
 from models.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -92,6 +92,12 @@ async def get_coins():
         "watched_count": sum(1 for pair in pairs if pair.get("watched")),
         "tradable_count": sum(1 for pair in pairs if pair.get("tradable")),
     }
+
+
+@router.get("/search")
+async def search_coins(q: str = Query(min_length=1), limit: int = Query(default=8, ge=1, le=20)):
+    suggestions = await search_inr_markets(q, limit=limit)
+    return {"query": q, "suggestions": suggestions, "count": len(suggestions)}
 
 
 @router.post("")
