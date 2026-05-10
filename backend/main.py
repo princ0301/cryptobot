@@ -6,7 +6,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from agents.scheduler import is_running, run_now, start_scheduler, stop_scheduler
+from agents.scheduler import is_running, run_now, run_startup_cycle, start_scheduler, stop_scheduler
 from config import settings
 from data.coin_registry import load_trading_pairs, load_watched_pairs
 from models.database import init_db
@@ -37,6 +37,14 @@ async def lifespan(_: FastAPI):
         logger.warning("Supabase tables are not ready. Run the SQL schema first.")
 
     start_scheduler()
+    if settings.startup_scan_enabled:
+        asyncio.create_task(run_startup_cycle())
+        logger.info(
+            "Initial agent cycle queued on startup (trading enabled: %s)",
+            settings.startup_trade_enabled,
+        )
+    else:
+        logger.info("Startup scan disabled by configuration")
     try:
         yield
     finally:

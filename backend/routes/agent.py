@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException
 
-from agents.scheduler import is_running
+from agents.scheduler import get_latest_scan_snapshot, is_running
 from models.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -52,4 +52,13 @@ async def get_last_analysis():
         return {"analyses": logs.data}
     except Exception as exc:
         logger.error("Error getting last analysis: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/scan-shortlist")
+async def get_scan_shortlist():
+    try:
+        return get_latest_scan_snapshot()
+    except Exception as exc:
+        logger.error("Error getting scan shortlist: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))

@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     min_confidence_threshold: float = 65.0
     trade_interval_minutes: int = 60
     scan_top_n: int = 8
+    startup_scan_enabled: bool = True
+    startup_trade_enabled: bool = False
 
     tax_rate_percent: float = 30.0
     tds_rate_percent: float = 1.0

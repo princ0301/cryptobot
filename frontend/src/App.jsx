@@ -10,6 +10,7 @@ import OpenPositions from './components/OpenPositions'
 import PortfolioChart from './components/PortfolioChart'
 import PortfolioSummary from './components/PortfolioSummary'
 import PriceCard from './components/PriceCard'
+import ScanShortlistCard from './components/ScanShortlistCard'
 import SentimentBar from './components/SentimentBar'
 import TradeLog from './components/TradeLog'
 import { usePolling } from './hooks/usePolling'
@@ -22,6 +23,7 @@ import {
   fetchPortfolio,
   fetchPortfolioHistory,
   fetchPrices,
+  fetchScanShortlist,
   fetchSentiment,
   fetchTrades,
 } from './utils/api'
@@ -48,6 +50,10 @@ export default function App() {
   const { data: criteria } = usePolling(useCallback(() => fetchCriteria(), []), 60000)
   const { data: status } = usePolling(useCallback(() => fetchAgentStatus(), []), 30000)
   const { data: health, refetch: refetchHealth } = usePolling(useCallback(() => fetchHealth(), []), 60000)
+  const { data: scanShortlist, refetch: refetchScanShortlist } = usePolling(
+    useCallback(() => fetchScanShortlist(), []),
+    30000,
+  )
   const { data: analyses, refetch: refetchAnalyses } = usePolling(
     useCallback(() => fetchLastAnalysis(), []),
     30000,
@@ -73,7 +79,8 @@ export default function App() {
   const handleCoinsChanged = useCallback(() => {
     refetchHealth()
     refetchPrices()
-  }, [refetchHealth, refetchPrices])
+    refetchScanShortlist()
+  }, [refetchHealth, refetchPrices, refetchScanShortlist])
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -180,7 +187,10 @@ export default function App() {
         {tab === 'market' && (
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
             <div className="xl:col-span-2">
-              <MarketExplorer coins={availableCoins} priceData={priceData} openCoins={openCoins} />
+              <div className="space-y-4">
+                <ScanShortlistCard shortlist={scanShortlist} />
+                <MarketExplorer coins={availableCoins} priceData={priceData} openCoins={openCoins} />
+              </div>
             </div>
             <div>
               <CoinUniverseManager onChanged={handleCoinsChanged} />

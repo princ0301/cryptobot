@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler()
 agent_running = False
+latest_scan_snapshot = {
+    "selected_pairs": [],
+    "ranked_pairs": [],
+    "updated_at": None,
+}
 
 
 def _rank_candidate_pairs(tradable_pairs: list[str], tickers: dict) -> list[str]:
@@ -67,6 +72,8 @@ def _rank_candidate_pairs(tradable_pairs: list[str], tickers: dict) -> list[str]
 
 
 def _build_scan_shortlist(tradable_pairs: list[str], tickers: dict) -> list[str]:
+    global latest_scan_snapshot
+
     ranked = _rank_candidate_pairs(tradable_pairs, tickers)
     core_pairs = [pair for pair in settings.core_trading_pairs if pair in tradable_pairs]
     shortlist = []
@@ -82,29 +89,37 @@ def _build_scan_shortlist(tradable_pairs: list[str], tickers: dict) -> list[str]
         if len(shortlist) >= max(settings.scan_top_n, len(core_pairs)):
             break
 
+    ranked_preview = [
+        {
+            "pair": item["pair"],
+            "score": round(item["score"], 2),
+            "vol_inr": round(item["notional_volume"], 2),
+            "change_24h": round(item["change_24h"], 2),
+            "spread_pct": round(item["spread_pct"], 3),
+        }
+        for item in ranked[: min(len(ranked), settings.scan_top_n)]
+    ]
+
+    latest_scan_snapshot = {
+        "selected_pairs": shortlist.copy(),
+        "ranked_pairs": ranked_preview,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
     logger.info(
         "Ranked scan shortlist: %s",
-        [
-            {
-                "pair": item["pair"],
-                "score": round(item["score"], 2),
-                "vol_inr": round(item["notional_volume"], 2),
-                "change_24h": round(item["change_24h"], 2),
-                "spread_pct": round(item["spread_pct"], 3),
-            }
-            for item in ranked[: min(len(ranked), settings.scan_top_n)]
-        ],
+        ranked_preview,
     )
     logger.info("Selected pairs for this cycle: %s", shortlist)
     return shortlist
 
 
-async def run_agent_cycle():
+async def run_agent_cycle(*, allow_trading: bool = True, cycle_label: str = "scheduled"):
     global agent_running
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     logger.info("%s", "=" * 60)
-    logger.info("Agent cycle started - %s", now)
+    logger.info("Agent cycle started (%s) - %s", cycle_label, now)
     logger.info("%s", "=" * 60)
 
     try:
@@ -163,6 +178,8 @@ async def run_agent_cycle():
 
         if sentiment.get("pause_trading"):
             logger.warning("High-risk news detected, skipping new entries this cycle")
+        if not allow_trading:
+            logger.info("Trading is disabled for this cycle; scan will run in observation mode only")
 
         portfolio_context = {
             "inr_balance": inr_balance,
@@ -177,7 +194,7 @@ async def run_agent_cycle():
 
         selected_pairs = _build_scan_shortlist(tradable_pairs, tickers)
         for pair in selected_pairs:
-            await analyze_coin(pair, tickers, sentiment, portfolio_context)
+            await analyze_coin(pair, tickers, sentiment, portfolio_context, allow_trading=allow_trading)
             await asyncio.sleep(2)
 
         logger.info("Agent cycle complete - %s", now)
@@ -185,7 +202,7 @@ async def run_agent_cycle():
         logger.error("Agent cycle error: %s", exc, exc_info=True)
 
 
-async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dict):
+async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dict, *, allow_trading: bool = True):
     logger.info("Analyzing %s", pair)
 
     ticker = tickers.get(pair)
@@ -254,6 +271,12 @@ async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dic
         logger.info("Reasoning: %s", reasoning[:100])
 
         if action == "BUY" and confidence >= settings.min_confidence_threshold:
+            if not allow_trading:
+                message = "Startup observation mode: trade execution disabled"
+                logger.info("Observation-only cycle, not opening %s despite BUY signal", pair)
+                await log_agent_cycle(pair, "HOLD", signals, sentiment, decision, current_price, message)
+                return
+
             open_count = portfolio.get("open_positions", 0)
             if open_count >= 3:
                 message = "Max positions reached"
@@ -362,6 +385,18 @@ def is_running() -> bool:
     return agent_running and scheduler.running
 
 
+def get_latest_scan_snapshot() -> dict:
+    return latest_scan_snapshot
+
+
 async def run_now():
     logger.info("Manual cycle triggered")
-    await run_agent_cycle()
+    await run_agent_cycle(cycle_label="manual")
+
+
+async def run_startup_cycle():
+    logger.info("Startup cycle triggered")
+    await run_agent_cycle(
+        allow_trading=settings.startup_trade_enabled,
+        cycle_label="startup",
+    )
