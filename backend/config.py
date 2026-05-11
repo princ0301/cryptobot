@@ -23,8 +23,10 @@ class Settings(BaseSettings):
     paper_starting_balance: float = 100000.0
     risk_per_trade_percent: float = 2.0
     max_position_percent: float = 25.0
+    max_open_positions: int = 5
     min_confidence_threshold: float = 65.0
     trade_interval_minutes: int = 60
+    position_monitor_interval_minutes: int = 5
     scan_top_n: int = 8
     startup_scan_enabled: bool = True
     startup_trade_enabled: bool = False

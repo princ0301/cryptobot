@@ -290,7 +290,7 @@ async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dic
                 return "HOLD"
 
             open_count = portfolio.get("open_positions", 0)
-            if open_count >= 3:
+            if open_count >= settings.max_open_positions:
                 message = "Max positions reached"
                 logger.info(
                     "Coin summary | %s | score=%s | trend=%s | rsi=%.1f | action=SKIPPED | conf=%s | risk=%s | reason=%s",
@@ -388,7 +388,7 @@ def start_scheduler():
     )
     scheduler.add_job(
         monitor_positions,
-        trigger=IntervalTrigger(minutes=15),
+        trigger=IntervalTrigger(minutes=settings.position_monitor_interval_minutes),
         id="position_monitor",
         name="Position Monitor",
         replace_existing=True,
@@ -408,7 +408,7 @@ def start_scheduler():
     logger.info("Trading cycle: every %s minutes", settings.trade_interval_minutes)
     logger.info("Ranked scan: top %s tradable pairs per cycle", settings.scan_top_n)
     logger.info("Core scan pairs: %s", settings.core_trading_pairs)
-    logger.info("Position monitor: every 15 minutes")
+    logger.info("Position monitor: every %s minutes", settings.position_monitor_interval_minutes)
     logger.info("Performance update: every 6 hours")
 
 

@@ -19,10 +19,16 @@ def calculate_position(
     else:
         risk_pct = 0.01
 
-    if open_positions >= 3:
-        logger.info("3 or more open positions detected, reducing new position size by 50%%")
+    caution_threshold = max(1, settings.max_open_positions - 1)
+    warning_threshold = max(1, settings.max_open_positions - 2)
+
+    if open_positions >= caution_threshold:
+        logger.info(
+            "%s or more open positions detected, reducing new position size by 50%%",
+            caution_threshold,
+        )
         risk_pct *= 0.5
-    elif open_positions == 2:
+    elif open_positions >= warning_threshold:
         risk_pct *= 0.75
 
     risk_inr = portfolio_balance * risk_pct
