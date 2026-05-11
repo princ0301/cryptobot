@@ -139,7 +139,7 @@ export default function App() {
               ))}
             </div>
 
-            <PortfolioSummary portfolio={portfolio} openPositions={positions} />
+            <PortfolioSummary portfolio={portfolio} openPositions={positions} priceData={priceData} />
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="space-y-4">
@@ -156,11 +156,11 @@ export default function App() {
           </>
         )}
 
-        {tab === 'trades' && <TradeLog trades={trades} />}
+        {tab === 'trades' && <TradeLog trades={trades} priceData={priceData} />}
 
         {tab === 'portfolio' && (
           <div className="space-y-4">
-            <PortfolioSummary portfolio={portfolio} openPositions={positions} />
+            <PortfolioSummary portfolio={portfolio} openPositions={positions} priceData={priceData} />
             <PortfolioChart history={history} />
             <OpenPositions positions={positions} newestPositionId={latestPosition?.id ?? null} />
 

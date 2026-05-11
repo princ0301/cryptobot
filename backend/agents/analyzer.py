@@ -151,6 +151,8 @@ def score_signals(signals: dict) -> dict:
             "total": 0,
             "tradeable": False,
             "volume_veto": True,
+            "raw_volume_veto": True,
+            "volume_override_candidate": False,
             "weak_volume": True,
             "high_volatility": False,
             "atr_pct": 0,
@@ -213,10 +215,18 @@ def score_signals(signals: dict) -> dict:
 
     atr_pct = float(signals.get("atr_pct", 0))
     weak_volume = volume_ratio < settings.min_volume_ratio_soft
-    volume_veto = volume_ratio < settings.min_volume_ratio_hard
+    raw_volume_veto = volume_ratio < settings.min_volume_ratio_hard
     high_volatility = atr_pct >= 4.5
 
     total = ema_score + rsi_score + macd_score + volume_score + support_resistance_score
+    volume_override_candidate = (
+        raw_volume_veto
+        and signals.get("trend") == "uptrend"
+        and macd_state in {"bullish", "bullish_continuation"}
+        and 45 <= rsi <= 68
+        and total >= 70
+    )
+    volume_veto = raw_volume_veto and not volume_override_candidate
     tradeable = (
         total >= 55
         and signals.get("trend") == "uptrend"
@@ -228,6 +238,8 @@ def score_signals(signals: dict) -> dict:
         "total": total,
         "tradeable": tradeable,
         "volume_veto": volume_veto,
+        "raw_volume_veto": raw_volume_veto,
+        "volume_override_candidate": volume_override_candidate,
         "weak_volume": weak_volume,
         "high_volatility": high_volatility,
         "atr_pct": atr_pct,

@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     supabase_service_key: str = ""
 
     groq_api_key: str = ""
+    groq_api_key_1: str = ""
+    groq_api_key_2: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
 
     gcp_project_id: str = ""

@@ -1,6 +1,6 @@
 import { Activity, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
 
-export default function PortfolioSummary({ portfolio, openPositions }) {
+export default function PortfolioSummary({ portfolio, openPositions, priceData = {} }) {
   if (!portfolio) {
     return (
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -14,12 +14,31 @@ export default function PortfolioSummary({ portfolio, openPositions }) {
     )
   }
 
-  const pnl = portfolio.pnl_total || 0
+  const startBalance = 100000
+  const openPositionList = openPositions?.positions || []
+  const liveOpenPnl = openPositionList.reduce((sum, position) => {
+    const currentPrice = Number(priceData?.[position.coin]?.price || position.current_price || 0)
+    const entryPrice = Number(position.entry_price || 0)
+    const quantity = Number(position.quantity || 0)
+
+    if (!currentPrice || !entryPrice || !quantity) {
+      return sum + Number(position.unrealized_pnl || 0)
+    }
+
+    return sum + ((currentPrice - entryPrice) * quantity)
+  }, 0)
+
+  const pnl = liveOpenPnl
   const pnlToday = portfolio.pnl_today || 0
   const isProfit = pnl >= 0
   const isTodayProfit = pnlToday >= 0
-  const startBalance = 100000
   const pnlPct = ((pnl / startBalance) * 100).toFixed(2)
+  const liveTotalValue = Number(portfolio.inr_balance || 0) + openPositionList.reduce((sum, position) => {
+    const currentPrice = Number(priceData?.[position.coin]?.price || position.current_price || 0)
+    const quantity = Number(position.quantity || 0)
+    const fallback = Number(position.position_inr || 0)
+    return sum + (currentPrice > 0 && quantity > 0 ? currentPrice * quantity : fallback)
+  }, 0)
 
   const cards = [
     {
@@ -31,7 +50,7 @@ export default function PortfolioSummary({ portfolio, openPositions }) {
     },
     {
       label: 'Total Portfolio',
-      value: `INR ${portfolio.total_value?.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
+      value: `INR ${liveTotalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
       sub: 'Started INR 1,00,000',
       icon: <Activity size={16} className="text-slate-400" />,
       color: 'text-white',
