@@ -1,9 +1,10 @@
 import logging
+from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, HTTPException
 
-from data.coindcx import get_all_tickers
+from data.coindcx import get_all_tickers, get_ticker_cache_meta
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -14,7 +15,14 @@ async def get_live_prices():
     """Get live prices for configured INR markets from CoinDCX."""
     try:
         prices = await get_all_tickers()
-        return {"prices": prices}
+        meta = get_ticker_cache_meta()
+        return {
+            "prices": prices,
+            "meta": {
+                **meta,
+                "served_at": datetime.now(timezone.utc).isoformat(),
+            },
+        }
     except httpx.TimeoutException as exc:
         logger.warning("Market prices request timed out: %r", exc)
         raise HTTPException(status_code=504, detail="CoinDCX price request timed out") from exc

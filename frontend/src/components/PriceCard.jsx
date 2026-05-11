@@ -6,9 +6,20 @@ const COIN_CONFIG = {
   BNB: { color: 'from-yellow-500/10 border-yellow-500/20', dot: 'bg-yellow-400' },
 }
 
+function formatUpdatedAt(value) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 export default function PriceCard({
   coin,
   data,
+  marketMeta = {},
   isPinned = false,
   isOpenPosition = false,
   onTogglePin,
@@ -30,6 +41,8 @@ export default function PriceCard({
   }
 
   const isUp = data.change_24h >= 0
+  const isStale = Boolean(marketMeta?.stale)
+  const updatedAt = formatUpdatedAt(marketMeta?.served_at)
 
   return (
     <div className={`bg-gradient-to-br ${config.color} rounded-xl border p-4 to-transparent`}>
@@ -41,6 +54,11 @@ export default function PriceCard({
           {isOpenPosition && (
             <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-xs text-indigo-300">
               Open
+            </span>
+          )}
+          {isStale && (
+            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-300">
+              Cached
             </span>
           )}
         </div>
@@ -83,6 +101,11 @@ export default function PriceCard({
           L <span className="text-slate-400">INR {Number(data.low_24h)?.toLocaleString('en-IN')}</span>
         </span>
       </div>
+      {updatedAt && (
+        <div className="mt-2 text-[11px] text-slate-500">
+          Updated {updatedAt}
+        </div>
+      )}
     </div>
   )
 }

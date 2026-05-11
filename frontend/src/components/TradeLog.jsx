@@ -21,6 +21,16 @@ function formatInr(value, digits = 0) {
   return `INR ${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: digits })}`
 }
 
+function formatUpdatedAt(value) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function TradeRow({ trade, priceData }) {
   const [expanded, setExpanded] = useState(false)
   const isOpen = trade.status === 'OPEN'
@@ -128,8 +138,9 @@ function TradeRow({ trade, priceData }) {
   )
 }
 
-export default function TradeLog({ trades, priceData = {} }) {
+export default function TradeLog({ trades, priceData = {}, marketMeta = {} }) {
   const [filter, setFilter] = useState('all')
+  const updatedAt = formatUpdatedAt(marketMeta?.served_at)
 
   const tradeList = trades?.trades || []
   const filtered = filter === 'all'
@@ -144,9 +155,21 @@ export default function TradeLog({ trades, priceData = {} }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800/60">
       <div className="flex items-center justify-between border-b border-slate-700/50 px-4 py-3">
-        <span className="text-sm font-semibold text-slate-200">
-          Trade Log <span className="ml-1 text-xs font-normal text-slate-500">({tradeList.length} trades)</span>
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-slate-200">
+            Trade Log <span className="ml-1 text-xs font-normal text-slate-500">({tradeList.length} trades)</span>
+          </span>
+          {marketMeta?.stale && (
+            <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs text-amber-300">
+              Cached market data
+            </span>
+          )}
+          {updatedAt && (
+            <span className="text-xs text-slate-500">
+              Updated {updatedAt}
+            </span>
+          )}
+        </div>
         <div className="flex gap-1">
           {['all', 'open', 'win', 'loss'].map((value) => (
             <button

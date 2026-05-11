@@ -19,7 +19,12 @@ PUBLIC_BASE = "https://public.coindcx.com"
 MARKETS_CACHE_TTL_SECONDS = 300
 _markets_cache: dict[str, object] = {"fetched_at": 0.0, "markets": []}
 TICKER_CACHE_TTL_SECONDS = 180
-_ticker_cache: dict[str, object] = {"fetched_at": 0.0, "tickers": {}}
+_ticker_cache: dict[str, object] = {
+    "fetched_at": 0.0,
+    "tickers": {},
+    "last_source": "live",
+    "last_error": None,
+}
 
 
 def _auth_headers(body: dict) -> dict:
@@ -44,6 +49,16 @@ def get_cached_tickers(max_age_seconds: int = TICKER_CACHE_TTL_SECONDS) -> dict:
     return {}
 
 
+def get_ticker_cache_meta() -> dict:
+    fetched_at = float(_ticker_cache.get("fetched_at", 0.0) or 0.0)
+    return {
+        "stale": _ticker_cache.get("last_source") == "cache",
+        "source": _ticker_cache.get("last_source", "live"),
+        "cached_at": int(fetched_at) if fetched_at else None,
+        "last_error": _ticker_cache.get("last_error"),
+    }
+
+
 async def get_all_tickers() -> dict:
     pair_map = load_pair_map()
     last_error: Exception | None = None
@@ -62,6 +77,8 @@ async def get_all_tickers() -> dict:
             else:
                 stale = get_cached_tickers()
                 if stale:
+                    _ticker_cache["last_source"] = "cache"
+                    _ticker_cache["last_error"] = str(exc)
                     logger.warning("CoinDCX ticker fetch failed, using cached prices: %s", exc)
                     return stale
                 raise
@@ -88,6 +105,8 @@ async def get_all_tickers() -> dict:
 
     _ticker_cache["tickers"] = result
     _ticker_cache["fetched_at"] = time.time()
+    _ticker_cache["last_source"] = "live"
+    _ticker_cache["last_error"] = None
     return result
 
 

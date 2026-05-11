@@ -60,6 +60,7 @@ export default function App() {
   )
 
   const priceData = prices?.prices || {}
+  const marketMeta = prices?.meta || {}
   const liveModeUnlocked = criteria?.live_mode_unlocked || false
   const openPositionsList = positions?.positions || []
   const latestPosition = openPositionsList[0] || null
@@ -135,7 +136,7 @@ export default function App() {
           <>
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
               {visibleCoins.map((coin) => (
-                <PriceCard key={coin} coin={coin} data={priceData[coin]} />
+                <PriceCard key={coin} coin={coin} data={priceData[coin]} marketMeta={marketMeta} />
               ))}
             </div>
 
@@ -156,7 +157,7 @@ export default function App() {
           </>
         )}
 
-        {tab === 'trades' && <TradeLog trades={trades} priceData={priceData} />}
+        {tab === 'trades' && <TradeLog trades={trades} priceData={priceData} marketMeta={marketMeta} />}
 
         {tab === 'portfolio' && (
           <div className="space-y-4">
