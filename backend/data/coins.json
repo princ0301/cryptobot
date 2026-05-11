@@ -1,0 +1,228 @@
+{
+  "pairs": [
+    {
+      "symbol": "BTCINR",
+      "display": "BTC/INR",
+      "candle_pair": "I-BTC_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "ETHINR",
+      "display": "ETH/INR",
+      "candle_pair": "I-ETH_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "BNBINR",
+      "display": "BNB/INR",
+      "candle_pair": "I-BNB_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "SOLINR",
+      "display": "SOL/INR",
+      "candle_pair": "I-SOL_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "XRPINR",
+      "display": "XRP/INR",
+      "candle_pair": "I-XRP_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "ADAINR",
+      "display": "ADA/INR",
+      "candle_pair": "I-ADA_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "DOGEINR",
+      "display": "DOGE/INR",
+      "candle_pair": "I-DOGE_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "DOTINR",
+      "display": "DOT/INR",
+      "candle_pair": "I-DOT_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "LINKINR",
+      "display": "LINK/INR",
+      "candle_pair": "I-LINK_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "AVAXINR",
+      "display": "AVAX/INR",
+      "candle_pair": "I-AVAX_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "SUIINR",
+      "display": "SUI/INR",
+      "candle_pair": "I-SUI_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "BCHINR",
+      "display": "BCH/INR",
+      "candle_pair": "I-BCH_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "UNIINR",
+      "display": "UNI/INR",
+      "candle_pair": "I-UNI_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "ATOMINR",
+      "display": "ATOM/INR",
+      "candle_pair": "I-ATOM_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "NEARINR",
+      "display": "NEAR/INR",
+      "candle_pair": "I-NEAR_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "INJINR",
+      "display": "INJ/INR",
+      "candle_pair": "I-INJ_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "FILINR",
+      "display": "FIL/INR",
+      "candle_pair": "I-FIL_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "APTINR",
+      "display": "APT/INR",
+      "candle_pair": "I-APT_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "ARBINR",
+      "display": "ARB/INR",
+      "candle_pair": "I-ARB_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "FETINR",
+      "display": "FET/INR",
+      "candle_pair": "I-FET_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "IMXINR",
+      "display": "IMX/INR",
+      "candle_pair": "I-IMX_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "HBARINR",
+      "display": "HBAR/INR",
+      "candle_pair": "I-HBAR_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "ETCINR",
+      "display": "ETC/INR",
+      "candle_pair": "I-ETC_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "TRXINR",
+      "display": "TRX/INR",
+      "candle_pair": "I-TRX_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "VELOINR",
+      "display": "VELO/INR",
+      "candle_pair": "I-VELO_INR",
+      "watched": true,
+      "tradable": true
+    },
+    {
+      "symbol": "OSMOINR",
+      "display": "OSMO/INR",
+      "candle_pair": "I-OSMO_INR",
+      "watched": true,
+      "tradable": false
+    },
+    {
+      "symbol": "SUPRAINR",
+      "display": "SUPRA/INR",
+      "candle_pair": "I-SUPRA_INR",
+      "watched": true,
+      "tradable": false
+    },
+    {
+      "symbol": "MEMEFIINR",
+      "display": "MEMEFI/INR",
+      "candle_pair": "I-MEMEFI_INR",
+      "watched": true,
+      "tradable": false
+    },
+    {
+      "symbol": "HIPPOINR",
+      "display": "HIPPO/INR",
+      "candle_pair": "I-HIPPO_INR",
+      "watched": true,
+      "tradable": false
+    },
+    {
+      "symbol": "LDOINR",
+      "display": "LDO/INR",
+      "candle_pair": "I-LDO_INR",
+      "watched": true,
+      "tradable": false
+    },
+    {
+      "symbol": "USDTINR",
+      "display": "USDT/INR",
+      "candle_pair": "I-USDT_INR",
+      "watched": false,
+      "tradable": false
+    },
+    {
+      "symbol": "LAYERINR",
+      "display": "LAYER/INR",
+      "candle_pair": "I-LAYER_INR",
+      "watched": true,
+      "tradable": false
+    }
+  ]
+}
