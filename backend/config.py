@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     reddit_high_risk_min_hits: int = 2
     reddit_high_risk_min_ratio: float = 0.15
     sentiment_pause_max_fg: int = 40
+    stop_loss_atr_multiplier: float = 1.5
+    structure_stop_buffer_percent: float = 0.5
+    min_stop_distance_percent: float = 0.5
+    tp1_r_multiple: float = 1.0
+    tp2_r_multiple: float = 2.0
 
     tax_rate_percent: float = 30.0
     tds_rate_percent: float = 1.0

@@ -385,6 +385,8 @@ def start_scheduler():
         name="Main Trading Cycle",
         replace_existing=True,
         max_instances=1,
+        coalesce=True,
+        misfire_grace_time=900,
     )
     scheduler.add_job(
         monitor_positions,
@@ -393,6 +395,8 @@ def start_scheduler():
         name="Position Monitor",
         replace_existing=True,
         max_instances=1,
+        coalesce=True,
+        misfire_grace_time=300,
     )
     scheduler.add_job(
         update_performance,
@@ -400,6 +404,8 @@ def start_scheduler():
         id="performance_update",
         name="Performance Recalculator",
         replace_existing=True,
+        coalesce=True,
+        misfire_grace_time=1800,
     )
 
     scheduler.start()

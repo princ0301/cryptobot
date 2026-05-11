@@ -257,17 +257,24 @@ def calculate_trade_levels(signals: dict, confidence: float) -> dict:
     price = float(signals.get("price", 0))
     atr = max(float(signals.get("atr", 0)), price * 0.01)
     support = float(signals.get("support", price - atr))
-    resistance = float(signals.get("resistance", price + (atr * 2)))
 
     entry = price
-    stop_loss = min(price - (atr * 1.2), support * 0.995)
+    structure_buffer = max(
+        price * (settings.structure_stop_buffer_percent / 100),
+        atr * 0.25,
+    )
+    atr_stop = entry - (atr * settings.stop_loss_atr_multiplier)
+    structure_stop = support - structure_buffer
+    stop_loss = min(atr_stop, structure_stop)
     if stop_loss >= entry:
-        stop_loss = entry - (atr * 1.2)
+        stop_loss = entry - (atr * settings.stop_loss_atr_multiplier)
 
-    risk_per_unit = max(entry - stop_loss, price * 0.005)
-    confidence_boost = max(0.0, min((confidence - 65) / 35, 1.0))
-    tp1 = max(entry + (risk_per_unit * (2.0 + 0.25 * confidence_boost)), resistance * 0.995)
-    tp2 = max(entry + (risk_per_unit * (3.0 + 0.5 * confidence_boost)), resistance * 1.015)
+    min_stop_distance = price * (settings.min_stop_distance_percent / 100)
+    risk_per_unit = max(entry - stop_loss, min_stop_distance)
+    stop_loss = entry - risk_per_unit
+
+    tp1 = entry + (risk_per_unit * settings.tp1_r_multiple)
+    tp2 = entry + (risk_per_unit * settings.tp2_r_multiple)
 
     tax_targets = calculate_tax_adjusted_targets(entry, tp1, tp2)
     risk_reward_1 = (tax_targets["tp1_tax_adjusted"] - entry) / risk_per_unit if risk_per_unit else 0

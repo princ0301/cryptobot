@@ -25,18 +25,18 @@ async def get_trade_history(
             query = query.eq("status", status)
 
         result = query.order("opened_at", desc=True).limit(limit).execute()
-        return {"trades": result.data, "count": len(result.data)}
+        return {"trades": result.data, "count": len(result.data), "degraded": False}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        return {"trades": [], "count": 0, "degraded": True}
 
 
 @router.get("/open")
 async def get_open_positions():
     try:
         result = get_db().table("open_positions").select("*").order("opened_at", desc=True).execute()
-        return {"positions": result.data, "count": len(result.data)}
+        return {"positions": result.data, "count": len(result.data), "degraded": False}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        return {"positions": [], "count": 0, "degraded": True}
 
 
 @router.get("/{trade_id}")

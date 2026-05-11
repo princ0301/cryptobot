@@ -28,10 +28,21 @@ async def get_agent_status():
             "total_trades": metrics_data.get("total_trades", 0),
             "live_mode_unlocked": metrics_data.get("live_mode_unlocked", False),
             "all_criteria_met": metrics_data.get("all_criteria_met", False),
+            "degraded": False,
         }
     except Exception as exc:
         logger.error("Error getting agent status: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        return {
+            "is_running": is_running(),
+            "mode": "paper",
+            "last_analysis": None,
+            "last_action": None,
+            "last_coin": None,
+            "total_trades": 0,
+            "live_mode_unlocked": False,
+            "all_criteria_met": False,
+            "degraded": True,
+        }
 
 
 @router.post("/start")
@@ -49,10 +60,10 @@ async def get_last_analysis():
     try:
         supabase = get_db()
         logs = supabase.table("agent_logs").select("*").order("cycle_time", desc=True).limit(3).execute()
-        return {"analyses": logs.data}
+        return {"analyses": logs.data, "degraded": False}
     except Exception as exc:
         logger.error("Error getting last analysis: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        return {"analyses": [], "degraded": True}
 
 
 @router.get("/scan-shortlist")

@@ -3,6 +3,7 @@ import hmac
 import json
 import logging
 import time
+import asyncio
 from typing import Optional
 
 import httpx
@@ -17,6 +18,8 @@ COINDCX_BASE = "https://api.coindcx.com"
 PUBLIC_BASE = "https://public.coindcx.com"
 MARKETS_CACHE_TTL_SECONDS = 300
 _markets_cache: dict[str, object] = {"fetched_at": 0.0, "markets": []}
+TICKER_CACHE_TTL_SECONDS = 180
+_ticker_cache: dict[str, object] = {"fetched_at": 0.0, "tickers": {}}
 
 
 def _auth_headers(body: dict) -> dict:
@@ -33,13 +36,38 @@ def _auth_headers(body: dict) -> dict:
     }
 
 
+def get_cached_tickers(max_age_seconds: int = TICKER_CACHE_TTL_SECONDS) -> dict:
+    cached = _ticker_cache.get("tickers", {}) or {}
+    fetched_at = float(_ticker_cache.get("fetched_at", 0.0) or 0.0)
+    if cached and (time.time() - fetched_at) <= max_age_seconds:
+        return dict(cached)
+    return {}
+
+
 async def get_all_tickers() -> dict:
     pair_map = load_pair_map()
+    last_error: Exception | None = None
 
-    async with httpx.AsyncClient(timeout=10) as client:
-        response = await client.get(f"{COINDCX_BASE}/exchange/ticker")
-        response.raise_for_status()
-        tickers = response.json()
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.get(f"{COINDCX_BASE}/exchange/ticker")
+                response.raise_for_status()
+                tickers = response.json()
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                await asyncio.sleep(0.75 * (attempt + 1))
+            else:
+                stale = get_cached_tickers()
+                if stale:
+                    logger.warning("CoinDCX ticker fetch failed, using cached prices: %s", exc)
+                    return stale
+                raise
+    else:
+        if last_error:
+            raise last_error
 
     result = {}
     for ticker in tickers:
@@ -57,6 +85,9 @@ async def get_all_tickers() -> dict:
                 "ask": float(ticker.get("ask", 0)),
                 "timestamp": ticker.get("timestamp"),
             }
+
+    _ticker_cache["tickers"] = result
+    _ticker_cache["fetched_at"] = time.time()
     return result
 
 

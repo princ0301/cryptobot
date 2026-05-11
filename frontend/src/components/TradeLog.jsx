@@ -66,6 +66,9 @@ function TradeRow({ trade, priceData }) {
         </td>
         <td className="px-4 py-3 font-mono text-xs text-slate-300">{formatInr(entryPrice, 2)}</td>
         <td className="px-4 py-3 font-mono text-xs text-slate-300">
+          {quantity.toLocaleString('en-IN', { maximumFractionDigits: 8 })}
+        </td>
+        <td className="px-4 py-3 font-mono text-xs text-slate-300">
           {isOpen
             ? currentPrice > 0
               ? formatInr(currentPrice, 2)
@@ -100,7 +103,7 @@ function TradeRow({ trade, priceData }) {
       </tr>
       {expanded && (
         <tr className="bg-slate-800/30">
-          <td colSpan={9} className="px-4 py-3">
+          <td colSpan={10} className="px-4 py-3">
             <div className="space-y-2">
               {trade.reasoning && (
                 <div>
@@ -174,6 +177,7 @@ export default function TradeLog({ trades, priceData = {} }) {
                 <th className="px-4 py-2 text-left">Pair</th>
                 <th className="px-4 py-2 text-left">Action</th>
                 <th className="px-4 py-2 text-left">Entry</th>
+                <th className="px-4 py-2 text-left">Qty</th>
                 <th className="px-4 py-2 text-left">Current</th>
                 <th className="px-4 py-2 text-left">P&amp;L</th>
                 <th className="px-4 py-2 text-left">Status</th>

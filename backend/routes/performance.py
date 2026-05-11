@@ -10,9 +10,11 @@ router = APIRouter()
 async def get_performance_metrics():
     try:
         result = get_db().table("performance_metrics").select("*").order("id", desc=True).limit(1).execute()
-        return result.data[0] if result.data else {}
+        payload = result.data[0] if result.data else {}
+        payload["degraded"] = False
+        return payload
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        return {"degraded": True}
 
 
 @router.get("/criteria")
@@ -64,15 +66,24 @@ async def get_promotion_criteria():
             "trades_progress": min((total_trades / settings.min_trades_required) * 100, 100),
             "all_criteria_met": metrics.get("all_criteria_met", False),
             "live_mode_unlocked": metrics.get("live_mode_unlocked", False),
+            "degraded": False,
         }
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        return {
+            "criteria": [],
+            "trades_completed": 0,
+            "trades_required": settings.min_trades_required,
+            "trades_progress": 0,
+            "all_criteria_met": False,
+            "live_mode_unlocked": False,
+            "degraded": True,
+        }
 
 
 @router.get("/coins")
 async def get_coin_performance():
     try:
         result = get_db().table("coin_performance").select("*").execute()
-        return {"coins": result.data}
+        return {"coins": result.data, "degraded": False}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        return {"coins": [], "degraded": True}

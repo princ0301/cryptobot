@@ -15,10 +15,21 @@ async def get_portfolio_balance():
                 "inr_balance": settings.paper_starting_balance,
                 "total_value": settings.paper_starting_balance,
                 "pnl_total": 0,
+                "pnl_today": 0,
+                "degraded": False,
             }
-        return result.data[0]
+        payload = result.data[0]
+        payload["degraded"] = False
+        return payload
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        return {
+            "inr_balance": settings.paper_starting_balance,
+            "total_value": settings.paper_starting_balance,
+            "invested_value": 0,
+            "pnl_total": 0,
+            "pnl_today": 0,
+            "degraded": True,
+        }
 
 
 @router.get("/history")
@@ -31,6 +42,6 @@ async def get_portfolio_history():
             .order("date", desc=False)
             .execute()
         )
-        return {"history": result.data}
+        return {"history": result.data, "degraded": False}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        return {"history": [], "degraded": True}
