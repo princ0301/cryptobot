@@ -31,6 +31,79 @@ latest_scan_snapshot = {
 }
 
 
+def _build_rule_based_hold(signals: dict, scores: dict, sentiment: dict) -> dict | None:
+    trend = signals.get("trend", "unknown")
+    rsi = float(signals.get("rsi", 50))
+    macd_state = signals.get("macd_crossover", "none")
+    bullish_macd = macd_state in {"bullish", "bullish_continuation"}
+    total = int(scores.get("total", 0))
+    volume_veto = bool(scores.get("volume_veto"))
+    volume_override_candidate = bool(scores.get("volume_override_candidate", False))
+    pause_trading = bool(sentiment.get("pause_trading"))
+
+    favorable_setup = (
+        trend == "uptrend"
+        and bullish_macd
+        and total >= 68
+        and rsi <= 68
+        and (not volume_veto or volume_override_candidate)
+    )
+    caution_setup = (
+        trend == "uptrend"
+        and bullish_macd
+        and total >= 60
+        and (not volume_veto or volume_override_candidate)
+    )
+
+    if favorable_setup or caution_setup:
+        return None
+
+    reasons = []
+    confidence = 40
+    risk = "medium"
+
+    if pause_trading:
+        reasons.append("trading pause active")
+        confidence = 40
+        risk = "high"
+
+    if total < 45:
+        reasons.append("signal score too weak")
+        confidence = 35
+        risk = "high"
+
+    if trend != "uptrend" and rsi > 25:
+        reasons.append("trend not favorable")
+        confidence = min(confidence, 40)
+        risk = "high"
+
+    if not bullish_macd and total < 60:
+        reasons.append("MACD not bullish")
+        confidence = min(confidence, 40)
+
+    if volume_veto and total < 68:
+        reasons.append("effective hard volume veto")
+        confidence = min(confidence, 40)
+        risk = "high"
+
+    if rsi > 72:
+        reasons.append("RSI overbought")
+        confidence = min(confidence, 40)
+
+    if not reasons:
+        return None
+
+    skip_reason = ", ".join(dict.fromkeys(reasons))
+    return {
+        "action": "HOLD",
+        "confidence": confidence,
+        "reasoning": "Rule-based prefilter skipped Groq because the setup was clearly not strong enough.",
+        "key_signals": [trend, macd_state, f"score {total}/90"],
+        "risk_assessment": risk,
+        "skip_reason": skip_reason,
+    }
+
+
 def _rank_candidate_pairs(tradable_pairs: list[str], tickers: dict) -> list[str]:
     ranked = []
     for pair in tradable_pairs:
@@ -260,13 +333,24 @@ async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dic
             return "SKIPPED"
 
         scores = score_signals(signals)
-        decision = await get_trading_decision(
-            pair=pair,
-            signals=signals,
-            signal_scores=scores,
-            sentiment=sentiment,
-            portfolio=portfolio,
-        )
+        decision = _build_rule_based_hold(signals, scores, sentiment)
+        if decision is None:
+            decision = await get_trading_decision(
+                pair=pair,
+                signals=signals,
+                signal_scores=scores,
+                sentiment=sentiment,
+                portfolio=portfolio,
+            )
+        else:
+            logger.info(
+                "Skipping Groq for %s | score=%s | trend=%s | rsi=%.1f | reason=%s",
+                pair,
+                scores["total"],
+                signals["trend"],
+                signals["rsi"],
+                decision["skip_reason"],
+            )
 
         action = decision.get("action", "HOLD")
         confidence = decision.get("confidence", 0)

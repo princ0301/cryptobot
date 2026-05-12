@@ -209,64 +209,48 @@ async def get_trading_decision(
     )
 
     user_message = f"""
-Analyze this market data and make a trading decision:
-
 PAIR: {pair}
-CURRENT PRICE: INR {signals.get('price', 0):,.2f}
+PRICE: INR {signals.get('price', 0):,.2f}
 
-TECHNICAL INDICATORS
-Trend: {signals.get('trend', 'unknown')} (50 EMA: INR {signals.get('ema_50', 0):,.2f} | 200 EMA: INR {signals.get('ema_200', 0):,.2f})
-Price vs EMA50: {signals.get('price_vs_ema50', 'unknown')}
-RSI (14): {signals.get('rsi', 50)} -> Zone: {signals.get('rsi_zone', 'neutral')}
-MACD: {signals.get('macd_crossover', 'none')} (Histogram: {signals.get('macd_histogram', 0):.4f})
-ATR: INR {signals.get('atr', 0):,.2f} ({signals.get('atr_pct', 0):.2f}% of price)
-Volume: {signals.get('volume_ratio', 1):.2f}x average -> {signals.get('volume_signal', 'average')}
-Bollinger Band Position: {signals.get('bb_position', 'middle')}
-Support: INR {signals.get('support', 0):,.2f} ({signals.get('dist_support_pct', 0):.2f}% away)
-Resistance: INR {signals.get('resistance', 0):,.2f} ({signals.get('dist_resistance_pct', 0):.2f}% away)
+TECHNICALS
+- Trend: {signals.get('trend', 'unknown')}
+- EMA50/EMA200: {signals.get('ema_50', 0):,.2f} / {signals.get('ema_200', 0):,.2f}
+- Price vs EMA50: {signals.get('price_vs_ema50', 'unknown')}
+- RSI: {signals.get('rsi', 50)} ({signals.get('rsi_zone', 'neutral')})
+- MACD: {signals.get('macd_crossover', 'none')} | Hist {signals.get('macd_histogram', 0):.4f}
+- ATR: INR {signals.get('atr', 0):,.2f} ({signals.get('atr_pct', 0):.2f}%)
+- Volume ratio: {signals.get('volume_ratio', 1):.2f}x ({signals.get('volume_signal', 'average')})
+- Support/Resistance distance: {signals.get('dist_support_pct', 0):.2f}% / {signals.get('dist_resistance_pct', 0):.2f}%
 
-SIGNAL SCORES
-EMA Score: {signal_scores.get('breakdown', {}).get('ema', 0)}/25
-RSI Score: {signal_scores.get('breakdown', {}).get('rsi', 0)}/25
-MACD Score: {signal_scores.get('breakdown', {}).get('macd', 0)}/20
-Volume Score: {signal_scores.get('breakdown', {}).get('volume', 0)}/10
-Support/Resistance Score: {signal_scores.get('breakdown', {}).get('support_resistance', 0)}/10
-TOTAL SCORE: {signal_scores.get('total', 0)}/90
-Weak Volume: {signal_scores.get('weak_volume', False)}
-Raw Hard Volume Veto Active: {raw_volume_veto}
-Effective Hard Volume Veto Active: {volume_veto}
-Volume Override Candidate: {volume_override_candidate}
-High Volatility: {signal_scores.get('high_volatility', False)} (ATR {signal_scores.get('atr_pct', 0):.2f}%)
-Favorable Setup Flag: {favorable_setup}
-Caution Setup Flag: {caution_setup}
+SCORES
+- Total: {signal_scores.get('total', 0)}/90
+- EMA/RSI/MACD/Volume/SR: {signal_scores.get('breakdown', {}).get('ema', 0)}/{signal_scores.get('breakdown', {}).get('rsi', 0)}/{signal_scores.get('breakdown', {}).get('macd', 0)}/{signal_scores.get('breakdown', {}).get('volume', 0)}/{signal_scores.get('breakdown', {}).get('support_resistance', 0)}
+- Weak volume: {signal_scores.get('weak_volume', False)}
+- Raw veto: {raw_volume_veto}
+- Effective veto: {volume_veto}
+- Volume override candidate: {volume_override_candidate}
+- High volatility: {signal_scores.get('high_volatility', False)}
+- Favorable setup: {favorable_setup}
+- Caution setup: {caution_setup}
 
-MARKET SENTIMENT
-Combined Sentiment Score: {sentiment.get('combined_score', 50)}/100 -> {sentiment.get('sentiment_label', 'Neutral')}
-Fear & Greed: {sentiment.get('fear_greed', {}).get('score', 50)} ({sentiment.get('fear_greed', {}).get('label', 'Neutral')})
-BTC Dominance: {sentiment.get('btc_dominance', {}).get('btc_dominance', 50):.1f}% -> {sentiment.get('btc_dominance', {}).get('signal', 'balanced')}
-Reddit Mood: {sentiment.get('reddit', {}).get('signal', 'neutral')}
-News Risk Level: {sentiment.get('news_risk_level', 'normal')}
-High Risk News Hits: {sentiment.get('reddit', {}).get('high_risk_hits', 0)} of {sentiment.get('reddit', {}).get('total_posts', 0)}
-Trading Pause Active: {sentiment.get('pause_trading', False)}
+SENTIMENT
+- Combined: {sentiment.get('combined_score', 50)}/100 ({sentiment.get('sentiment_label', 'Neutral')})
+- Fear & Greed: {sentiment.get('fear_greed', {}).get('score', 50)} ({sentiment.get('fear_greed', {}).get('label', 'Neutral')})
+- BTC dominance: {sentiment.get('btc_dominance', {}).get('btc_dominance', 50):.1f}% ({sentiment.get('btc_dominance', {}).get('signal', 'balanced')})
+- News risk: {sentiment.get('news_risk_level', 'normal')}
+- Trading pause: {sentiment.get('pause_trading', False)}
 
 PORTFOLIO
-Paper Balance: INR {portfolio.get('inr_balance', 100000):,.2f}
-Open Positions: {portfolio.get('open_positions', 0)}
-Total Portfolio Value: INR {portfolio.get('total_value', 100000):,.2f}
+- Cash: INR {portfolio.get('inr_balance', 100000):,.2f}
+- Open positions: {portfolio.get('open_positions', 0)}
+- Total value: INR {portfolio.get('total_value', 100000):,.2f}
 
 CONSTRAINTS
-- Minimum confidence to trade: {min_confidence:.0f}%
-- Risk per trade: 2% of portfolio = INR {portfolio.get('inr_balance', 100000) * 0.02:,.0f}
-- Maximum position: 25% = INR {portfolio.get('inr_balance', 100000) * 0.25:,.0f}
-- Minimum Risk:Reward ratio: 1:2
-- Tax: 30% on profits (already factored into TP levels)
-
-DECISION GUIDANCE
-- If Favorable Setup Flag is true, do not default to HOLD just because weak volume or cautionary news is present.
-- If Caution Setup Flag is true, require a clear reason before rejecting the setup.
-- Effective Hard Volume Veto Active = true should be treated as a real blocker.
-- Raw Hard Volume Veto Active with Volume Override Candidate = true should be treated as a severe penalty, not an automatic blocker.
-- Overbought RSI above 72, downtrend, or poor risk:reward remain valid reasons to HOLD.
+- Minimum confidence: {min_confidence:.0f}%
+- Risk per trade: INR {portfolio.get('inr_balance', 100000) * 0.02:,.0f}
+- Maximum position: INR {portfolio.get('inr_balance', 100000) * 0.25:,.0f}
+- Minimum risk:reward: 1:2
+- 30% Indian tax on profits
     """.strip()
 
     try:
@@ -288,7 +272,7 @@ DECISION GUIDANCE
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_message},
                     ],
-                    max_tokens=400,
+                    max_tokens=220,
                     temperature=0.1,
                 )
                 _active_groq_client_index = client_index
