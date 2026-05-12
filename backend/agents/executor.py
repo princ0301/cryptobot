@@ -276,7 +276,12 @@ async def monitor_open_trades(current_prices: dict):
                 ).eq("id", position["id"]).execute()
 
         if not tp1_hit and current_price >= take_profit_1:
-            logger.info("TP1 hit: %s @ INR %.2f - realizing 50%% and moving SL to breakeven", pair, take_profit_1)
+            logger.info(
+                "TP1 hit: %s @ INR %.2f - realizing %.0f%% and moving SL to breakeven",
+                pair,
+                take_profit_1,
+                settings.partial_take_profit_fraction * 100,
+            )
             await take_partial_profit(position, take_profit_1, current_price)
             continue
 
@@ -321,7 +326,7 @@ async def take_partial_profit(position: dict, exit_price: float, current_price: 
     entry = float(position["entry_price"])
     quantity = float(position["quantity"])
     position_inr = float(position["position_inr"])
-    close_qty = quantity * 0.5
+    close_qty = quantity * settings.partial_take_profit_fraction
     remaining_qty = quantity - close_qty
 
     pnl = calculate_pnl(entry, exit_price, close_qty, "BUY")
@@ -347,7 +352,10 @@ async def take_partial_profit(position: dict, exit_price: float, current_price: 
         portfolio,
         inr_balance=portfolio["inr_balance"] + released_cash,
         total_value=portfolio["total_value"] + pnl["net_pnl"],
-        invested_value=max(0, portfolio.get("invested_value", 0) - (position_inr * 0.5)),
+        invested_value=max(
+            0,
+            portfolio.get("invested_value", 0) - (position_inr * settings.partial_take_profit_fraction),
+        ),
         pnl_total=portfolio.get("pnl_total", 0) + pnl["net_pnl"],
         pnl_today=portfolio.get("pnl_today", 0) + pnl["net_pnl"],
     )

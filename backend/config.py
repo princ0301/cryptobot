@@ -40,12 +40,14 @@ class Settings(BaseSettings):
     stop_loss_atr_multiplier: float = 1.5
     structure_stop_buffer_percent: float = 0.5
     min_stop_distance_percent: float = 0.5
-    tp1_r_multiple: float = 1.0
-    tp2_r_multiple: float = 2.0
-    profit_lock_trigger_r_multiple: float = 0.75
-    profit_lock_buffer_r_multiple: float = 0.2
-    trailing_stop_trigger_r_multiple: float = 1.5
-    trailing_stop_distance_r_multiple: float = 0.75
+    max_stop_distance_percent: float = 3.5
+    tp1_r_multiple: float = 0.8
+    tp2_r_multiple: float = 1.4
+    partial_take_profit_fraction: float = 0.6
+    profit_lock_trigger_r_multiple: float = 0.5
+    profit_lock_buffer_r_multiple: float = 0.1
+    trailing_stop_trigger_r_multiple: float = 1.0
+    trailing_stop_distance_r_multiple: float = 0.5
 
     tax_rate_percent: float = 30.0
     tds_rate_percent: float = 1.0

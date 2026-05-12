@@ -270,7 +270,10 @@ def calculate_trade_levels(signals: dict, confidence: float) -> dict:
         stop_loss = entry - (atr * settings.stop_loss_atr_multiplier)
 
     min_stop_distance = price * (settings.min_stop_distance_percent / 100)
-    risk_per_unit = max(entry - stop_loss, min_stop_distance)
+    max_stop_distance = price * (settings.max_stop_distance_percent / 100)
+    raw_risk_per_unit = entry - stop_loss
+    risk_per_unit = max(raw_risk_per_unit, min_stop_distance)
+    risk_per_unit = min(risk_per_unit, max_stop_distance)
     stop_loss = entry - risk_per_unit
 
     tp1 = entry + (risk_per_unit * settings.tp1_r_multiple)
