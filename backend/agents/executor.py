@@ -90,6 +90,21 @@ def _cash_released(entry_price: float, quantity: float, pnl: dict) -> float:
     return (entry_price * quantity) + pnl["net_pnl"]
 
 
+def _get_trade_snapshot(trade_id: int) -> dict:
+    try:
+        trade_result = _db().table("trades").select("*").eq("id", trade_id).single().execute()
+        return trade_result.data or {}
+    except Exception as exc:
+        logger.error("Error fetching trade snapshot %s: %s", trade_id, exc)
+        return {}
+
+
+def _get_initial_risk(position: dict, trade: dict) -> float:
+    entry = float(position["entry_price"])
+    initial_stop = float(trade.get("stop_loss", position["stop_loss"]))
+    return max(0.0, entry - initial_stop)
+
+
 async def open_paper_trade(
     pair: str,
     decision: dict,
@@ -224,17 +239,41 @@ async def monitor_open_trades(current_prices: dict):
         if not current_price:
             continue
 
+        trade = _get_trade_snapshot(position["trade_id"])
         entry = float(position["entry_price"])
         stop_loss = float(position["stop_loss"])
         take_profit_1 = float(position["take_profit_1"])
         take_profit_2 = float(position["take_profit_2"])
         quantity = float(position["quantity"])
         tp1_hit = bool(position.get("tp1_hit", False))
+        initial_risk = _get_initial_risk(position, trade)
 
         if current_price <= stop_loss:
             logger.warning("Stop loss hit: %s @ INR %.2f", pair, stop_loss)
             await close_paper_trade(position, stop_loss, "CLOSED_SL")
             continue
+
+        if initial_risk > 0 and not tp1_hit:
+            early_lock_trigger = entry + (initial_risk * settings.profit_lock_trigger_r_multiple)
+            early_lock_stop = entry - (initial_risk * settings.profit_lock_buffer_r_multiple)
+
+            if current_price >= early_lock_trigger and stop_loss < early_lock_stop:
+                logger.info(
+                    "Profit lock activated: %s @ INR %.2f - tightening SL from INR %.2f to INR %.2f",
+                    pair,
+                    current_price,
+                    stop_loss,
+                    early_lock_stop,
+                )
+                stop_loss = early_lock_stop
+                _db().table("open_positions").update(
+                    {
+                        "stop_loss": round(early_lock_stop, 2),
+                        "current_price": current_price,
+                        "unrealized_pnl": round((current_price - entry) * quantity, 2),
+                        "updated_at": _now_iso(),
+                    }
+                ).eq("id", position["id"]).execute()
 
         if not tp1_hit and current_price >= take_profit_1:
             logger.info("TP1 hit: %s @ INR %.2f - realizing 50%% and moving SL to breakeven", pair, take_profit_1)
@@ -245,6 +284,27 @@ async def monitor_open_trades(current_prices: dict):
             logger.info("TP2 hit: %s @ INR %.2f - full exit", pair, take_profit_2)
             await close_paper_trade(position, take_profit_2, "CLOSED_TP2")
             continue
+
+        if initial_risk > 0 and current_price >= entry + (initial_risk * settings.trailing_stop_trigger_r_multiple):
+            trailing_stop = current_price - (initial_risk * settings.trailing_stop_distance_r_multiple)
+            desired_stop = max(stop_loss, entry, trailing_stop)
+            if desired_stop > stop_loss:
+                logger.info(
+                    "Trailing stop advanced: %s @ INR %.2f - moving SL from INR %.2f to INR %.2f",
+                    pair,
+                    current_price,
+                    stop_loss,
+                    desired_stop,
+                )
+                stop_loss = desired_stop
+                _db().table("open_positions").update(
+                    {
+                        "stop_loss": round(desired_stop, 2),
+                        "current_price": current_price,
+                        "unrealized_pnl": round((current_price - entry) * quantity, 2),
+                        "updated_at": _now_iso(),
+                    }
+                ).eq("id", position["id"]).execute()
 
         unrealized = (current_price - entry) * quantity
         _db().table("open_positions").update(

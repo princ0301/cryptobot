@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     min_stop_distance_percent: float = 0.5
     tp1_r_multiple: float = 1.0
     tp2_r_multiple: float = 2.0
+    profit_lock_trigger_r_multiple: float = 0.75
+    profit_lock_buffer_r_multiple: float = 0.2
+    trailing_stop_trigger_r_multiple: float = 1.5
+    trailing_stop_distance_r_multiple: float = 0.75
 
     tax_rate_percent: float = 30.0
     tds_rate_percent: float = 1.0
