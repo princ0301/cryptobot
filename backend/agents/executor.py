@@ -99,6 +99,25 @@ def _get_trade_snapshot(trade_id: int) -> dict:
         return {}
 
 
+async def get_latest_closed_trade(pair: str) -> dict:
+    try:
+        result = (
+            _db()
+            .table("trades")
+            .select("*")
+            .eq("mode", "paper")
+            .eq("coin", pair)
+            .neq("status", "OPEN")
+            .order("closed_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return result.data[0] if result.data else {}
+    except Exception as exc:
+        logger.error("Error fetching latest closed trade for %s: %s", pair, exc)
+        return {}
+
+
 def _get_initial_risk(position: dict, trade: dict) -> float:
     entry = float(position["entry_price"])
     initial_stop = float(trade.get("stop_loss", position["stop_loss"]))

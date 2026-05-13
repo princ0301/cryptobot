@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     risk_per_trade_percent: float = 2.0
     max_position_percent: float = 25.0
     max_open_positions: int = 5
+    coin_reentry_cooldown_minutes: int = 180
     min_confidence_threshold: float = 65.0
     trade_interval_minutes: int = 60
     position_monitor_interval_minutes: int = 5

@@ -17,6 +17,22 @@ const STATUS_LABEL = {
   CLOSED_MANUAL: 'Manual',
 }
 
+function getStatusMeta(trade) {
+  const realizedPnl = Number(trade.pnl_after_tax || 0)
+
+  if (trade.status === 'CLOSED_SL' && realizedPnl > 0) {
+    return {
+      label: 'Locked Profit',
+      style: 'bg-emerald-500/15 text-emerald-400',
+    }
+  }
+
+  return {
+    label: STATUS_LABEL[trade.status] || trade.status,
+    style: STATUS_STYLE[trade.status] || STATUS_STYLE.OPEN,
+  }
+}
+
 function formatInr(value, digits = 0) {
   return `INR ${Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: digits })}`
 }
@@ -34,6 +50,7 @@ function formatUpdatedAt(value) {
 function TradeRow({ trade, priceData }) {
   const [expanded, setExpanded] = useState(false)
   const isOpen = trade.status === 'OPEN'
+  const statusMeta = getStatusMeta(trade)
   const coin = `${trade.coin?.replace('INR', '') || ''}/INR`
   const time = new Date(trade.opened_at).toLocaleString('en-IN', {
     day: '2-digit',
@@ -102,8 +119,8 @@ function TradeRow({ trade, priceData }) {
           )}
         </td>
         <td className="px-4 py-3">
-          <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[trade.status] || STATUS_STYLE.OPEN}`}>
-            {STATUS_LABEL[trade.status] || trade.status}
+          <span className={`rounded-full px-2 py-0.5 text-xs ${statusMeta.style}`}>
+            {statusMeta.label}
           </span>
         </td>
         <td className="px-4 py-3 font-mono text-xs text-slate-500">{trade.confidence}%</td>

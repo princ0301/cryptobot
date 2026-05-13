@@ -1,12 +1,13 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from agents.analyzer import calculate_indicators, calculate_trade_levels, get_latest_signals, score_signals
 from agents.executor import (
+    get_latest_closed_trade,
     get_open_positions_count,
     get_paper_portfolio,
     monitor_open_trades,
@@ -372,6 +373,32 @@ async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dic
                 )
                 await log_agent_cycle(pair, "HOLD", signals, sentiment, decision, current_price, message)
                 return "HOLD"
+
+            latest_closed = await get_latest_closed_trade(pair)
+            if latest_closed and latest_closed.get("closed_at"):
+                try:
+                    closed_at = datetime.fromisoformat(str(latest_closed["closed_at"]).replace("Z", "+00:00"))
+                    cooldown_until = closed_at + timedelta(minutes=settings.coin_reentry_cooldown_minutes)
+                    if datetime.now(timezone.utc) < cooldown_until:
+                        pnl_after_tax = float(latest_closed.get("pnl_after_tax", 0) or 0)
+                        message = (
+                            f"Cooldown active until {cooldown_until.astimezone().strftime('%I:%M %p')}"
+                            f" after recent {'profit' if pnl_after_tax > 0 else 'exit'}"
+                        )
+                        logger.info(
+                            "Coin summary | %s | score=%s | trend=%s | rsi=%.1f | action=SKIPPED | conf=%s | risk=%s | reason=%s",
+                            pair,
+                            scores["total"],
+                            signals["trend"],
+                            signals["rsi"],
+                            confidence,
+                            risk_level,
+                            message,
+                        )
+                        await log_agent_cycle(pair, "SKIPPED", signals, sentiment, decision, current_price, message)
+                        return "SKIPPED"
+                except Exception as exc:
+                    logger.warning("Could not evaluate cooldown for %s: %s", pair, exc)
 
             open_count = portfolio.get("open_positions", 0)
             if open_count >= settings.max_open_positions:
