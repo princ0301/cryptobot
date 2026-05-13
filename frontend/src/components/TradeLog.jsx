@@ -104,8 +104,9 @@ function formatUpdatedAt(value) {
   })
 }
 
-function TradeRow({ trade, priceData, showCurrentColumn, showActionColumn, showExitTypeColumn }) {
+function TradeRow({ trade, priceData, showCurrentColumn, showActionColumn, showExitTypeColumn, onManualCloseTrade }) {
   const [expanded, setExpanded] = useState(false)
+  const [closing, setClosing] = useState(false)
   const isOpen = trade.status === 'OPEN'
   const statusMeta = getStatusMeta(trade)
   const exitTypeLabel = getExitTypeLabel(trade)
@@ -129,6 +130,21 @@ function TradeRow({ trade, priceData, showCurrentColumn, showActionColumn, showE
   const pnlPct = isOpen && currentPrice > 0 && entryPrice > 0
     ? ((currentPrice - entryPrice) / entryPrice) * 100
     : null
+
+  const handleManualClose = async (event) => {
+    event.stopPropagation()
+    if (!isOpen || closing || !onManualCloseTrade) return
+
+    const confirmed = window.confirm(`Close ${coin} manually at the current market price?`)
+    if (!confirmed) return
+
+    try {
+      setClosing(true)
+      await onManualCloseTrade(trade.id)
+    } finally {
+      setClosing(false)
+    }
+  }
 
   return (
     <>
@@ -210,6 +226,18 @@ function TradeRow({ trade, priceData, showCurrentColumn, showActionColumn, showE
                 {isOpen && currentPrice > 0 && <span>Now: {formatInr(currentPrice, 2)}</span>}
                 {trade.tax_provision > 0 && <span>Tax: {formatInr(trade.tax_provision, 0)}</span>}
               </div>
+              {isOpen && onManualCloseTrade && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleManualClose}
+                    disabled={closing}
+                    className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-300 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {closing ? 'Closing...' : 'Manual Exit'}
+                  </button>
+                </div>
+              )}
             </div>
           </td>
         </tr>
@@ -218,7 +246,7 @@ function TradeRow({ trade, priceData, showCurrentColumn, showActionColumn, showE
   )
 }
 
-export default function TradeLog({ trades, priceData = {}, marketMeta = {} }) {
+export default function TradeLog({ trades, priceData = {}, marketMeta = {}, onManualCloseTrade }) {
   const [filter, setFilter] = useState('all')
   const updatedAt = formatUpdatedAt(marketMeta?.served_at)
   const showCurrentColumn = filter === 'all' || filter === 'open'
@@ -302,6 +330,7 @@ export default function TradeLog({ trades, priceData = {}, marketMeta = {} }) {
                   showCurrentColumn={showCurrentColumn}
                   showActionColumn={showActionColumn}
                   showExitTypeColumn={showExitTypeColumn}
+                  onManualCloseTrade={onManualCloseTrade}
                 />
               ))}
             </tbody>

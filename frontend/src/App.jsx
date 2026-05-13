@@ -15,6 +15,7 @@ import SentimentBar from './components/SentimentBar'
 import TradeLog from './components/TradeLog'
 import { usePolling } from './hooks/usePolling'
 import {
+  closeTradeManually,
   fetchAgentStatus,
   fetchCriteria,
   fetchHealth,
@@ -43,10 +44,10 @@ export default function App() {
 
   const { data: prices, refetch: refetchPrices } = usePolling(useCallback(() => fetchPrices(), []), 15000)
   const { data: sentiment } = usePolling(useCallback(() => fetchSentiment(), []), 60000)
-  const { data: portfolio } = usePolling(useCallback(() => fetchPortfolio(), []), 20000)
-  const { data: history } = usePolling(useCallback(() => fetchPortfolioHistory(), []), 120000)
-  const { data: trades } = usePolling(useCallback(() => fetchTrades({ mode: 'paper', limit: 50 }), []), 30000)
-  const { data: positions } = usePolling(useCallback(() => fetchOpenPositions(), []), 15000)
+  const { data: portfolio, refetch: refetchPortfolio } = usePolling(useCallback(() => fetchPortfolio(), []), 20000)
+  const { data: history, refetch: refetchHistory } = usePolling(useCallback(() => fetchPortfolioHistory(), []), 120000)
+  const { data: trades, refetch: refetchTrades } = usePolling(useCallback(() => fetchTrades({ mode: 'paper', limit: 50 }), []), 30000)
+  const { data: positions, refetch: refetchPositions } = usePolling(useCallback(() => fetchOpenPositions(), []), 15000)
   const { data: criteria } = usePolling(useCallback(() => fetchCriteria(), []), 60000)
   const { data: status } = usePolling(useCallback(() => fetchAgentStatus(), []), 30000)
   const { data: health, refetch: refetchHealth } = usePolling(useCallback(() => fetchHealth(), []), 60000)
@@ -82,6 +83,17 @@ export default function App() {
     refetchPrices()
     refetchScanShortlist()
   }, [refetchHealth, refetchPrices, refetchScanShortlist])
+
+  const handleManualCloseTrade = useCallback(async (tradeId) => {
+    await closeTradeManually(tradeId)
+    await Promise.all([
+      refetchTrades(),
+      refetchPositions(),
+      refetchPortfolio(),
+      refetchHistory(),
+      refetchPrices(),
+    ])
+  }, [refetchHistory, refetchPortfolio, refetchPositions, refetchPrices, refetchTrades])
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -157,7 +169,14 @@ export default function App() {
           </>
         )}
 
-        {tab === 'trades' && <TradeLog trades={trades} priceData={priceData} marketMeta={marketMeta} />}
+        {tab === 'trades' && (
+          <TradeLog
+            trades={trades}
+            priceData={priceData}
+            marketMeta={marketMeta}
+            onManualCloseTrade={handleManualCloseTrade}
+          />
+        )}
 
         {tab === 'portfolio' && (
           <div className="space-y-4">

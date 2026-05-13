@@ -2,6 +2,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from agents.executor import manually_close_trade
 from models.database import get_db
 
 router = APIRouter()
@@ -48,5 +49,15 @@ async def get_trade_detail(trade_id: int):
         return result.data
     except HTTPException:
         raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/{trade_id}/close")
+async def close_trade_manually(trade_id: int):
+    try:
+        return await manually_close_trade(trade_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

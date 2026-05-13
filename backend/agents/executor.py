@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from agents.risk_manager import calculate_pnl, calculate_position
 from config import settings
+from data.coindcx import get_all_tickers
 from models.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -411,3 +412,27 @@ async def close_paper_trade(position: dict, exit_price: float, reason: str):
         pnl["gross_pnl"],
         pnl["net_pnl"],
     )
+
+
+async def manually_close_trade(trade_id: int) -> dict:
+    result = _db().table("open_positions").select("*").eq("trade_id", trade_id).single().execute()
+    position = result.data
+    if not position:
+        raise ValueError("Open trade not found")
+
+    pair = position["coin"]
+    tickers = await get_all_tickers()
+    current_price = float(tickers.get(pair, {}).get("price") or 0)
+    if current_price <= 0:
+        current_price = float(position.get("current_price") or 0)
+    if current_price <= 0:
+        raise ValueError(f"Current price unavailable for {pair}")
+
+    await close_paper_trade(position, current_price, "CLOSED_MANUAL")
+    logger.info("Manual exit executed: %s trade_id=%s @ INR %.2f", pair, trade_id, current_price)
+    return {
+        "trade_id": trade_id,
+        "coin": pair,
+        "exit_price": round(current_price, 2),
+        "status": "CLOSED_MANUAL",
+    }
