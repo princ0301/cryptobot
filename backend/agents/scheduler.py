@@ -400,7 +400,7 @@ async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dic
                 except Exception as exc:
                     logger.warning("Could not evaluate cooldown for %s: %s", pair, exc)
 
-            open_count = portfolio.get("open_positions", 0)
+            open_count = await get_open_positions_count()
             if open_count >= settings.max_open_positions:
                 message = "Max positions reached"
                 logger.info(
@@ -428,6 +428,7 @@ async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dic
             )
 
             if trade:
+                portfolio["open_positions"] = open_count + 1
                 logger.info(
                     "Coin summary | %s | score=%s | trend=%s | rsi=%.1f | action=BUY | conf=%s | risk=%s | trade_id=%s | rr=%s",
                     pair,
