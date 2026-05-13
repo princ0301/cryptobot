@@ -104,7 +104,27 @@ function formatUpdatedAt(value) {
   })
 }
 
-function TradeRow({ trade, priceData, showCurrentColumn, showActionColumn, showExitTypeColumn, onManualCloseTrade }) {
+function formatTradeTime(trade, useClosedTime = false) {
+  const raw = useClosedTime ? (trade.closed_at || trade.opened_at) : trade.opened_at
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return '--'
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function TradeRow({
+  trade,
+  priceData,
+  showCurrentColumn,
+  showActionColumn,
+  showExitTypeColumn,
+  onManualCloseTrade,
+  useClosedTime,
+}) {
   const [expanded, setExpanded] = useState(false)
   const [closing, setClosing] = useState(false)
   const isOpen = trade.status === 'OPEN'
@@ -113,12 +133,7 @@ function TradeRow({ trade, priceData, showCurrentColumn, showActionColumn, showE
   const stageLabel = getStageLabel(trade)
   const stageStyle = getStageStyle(trade)
   const coin = `${trade.coin?.replace('INR', '') || ''}/INR`
-  const time = new Date(trade.opened_at).toLocaleString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const time = formatTradeTime(trade, useClosedTime)
 
   const entryPrice = Number(trade.entry_price || 0)
   const quantity = Number(trade.quantity || 0)
@@ -252,6 +267,7 @@ export default function TradeLog({ trades, priceData = {}, marketMeta = {}, onMa
   const showCurrentColumn = filter === 'all' || filter === 'open'
   const showActionColumn = filter === 'all' || filter === 'open'
   const showExitTypeColumn = filter === 'win' || filter === 'loss'
+  const useClosedTime = filter === 'win' || filter === 'loss'
 
   const tradeList = trades?.trades || []
   const filteredBase = filter === 'all'
@@ -331,6 +347,7 @@ export default function TradeLog({ trades, priceData = {}, marketMeta = {}, onMa
                   showActionColumn={showActionColumn}
                   showExitTypeColumn={showExitTypeColumn}
                   onManualCloseTrade={onManualCloseTrade}
+                  useClosedTime={useClosedTime}
                 />
               ))}
             </tbody>
