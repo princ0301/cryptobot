@@ -9,6 +9,9 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+MAJOR_PAIRS = {"BTCINR", "ETHINR", "BNBINR"}
+VOLATILE_ALT_PAIRS = {"INJINR", "SUIINR", "ETCINR", "AVAXINR", "LINKINR"}
+
 
 def calculate_indicators(df: pd.DataFrame) -> Optional[pd.DataFrame]:
     if df is None or df.empty:
@@ -21,6 +24,7 @@ def calculate_indicators(df: pd.DataFrame) -> Optional[pd.DataFrame]:
 
     try:
         enriched = df.copy()
+        enriched.ta.ema(length=20, append=True)
         enriched.ta.ema(length=50, append=True)
         enriched.ta.ema(length=200, append=True)
         enriched.ta.rsi(length=14, append=True)
@@ -55,6 +59,7 @@ def get_latest_signals(df: pd.DataFrame) -> Optional[dict]:
         prev = df.iloc[-2] if len(df) >= 2 else last
 
         price = float(last["close"])
+        ema20 = _first_available(last, "EMA_20")
         ema50 = _first_available(last, "EMA_50")
         ema200 = _first_available(last, "EMA_200")
         rsi = _first_available(last, "RSI_14", default=50)
@@ -72,6 +77,8 @@ def get_latest_signals(df: pd.DataFrame) -> Optional[dict]:
 
         trend = "uptrend" if ema50 > ema200 else "downtrend"
         price_vs_ema50 = "above" if price > ema50 else "below"
+        price_vs_ema20 = "above" if price > ema20 else "below"
+        ema20_vs_ema50 = "above" if ema20 > ema50 else "below"
 
         if prev_macd < prev_signal and macd > macd_signal:
             macd_crossover = "bullish"
@@ -115,10 +122,14 @@ def get_latest_signals(df: pd.DataFrame) -> Optional[dict]:
 
         return {
             "price": price,
+            "ema_20": round(ema20, 2),
             "ema_50": round(ema50, 2),
             "ema_200": round(ema200, 2),
             "trend": trend,
             "price_vs_ema50": price_vs_ema50,
+            "price_vs_ema20": price_vs_ema20,
+            "ema20_vs_ema50": ema20_vs_ema50,
+            "dist_ema20_pct": round(((price - ema20) / ema20) * 100, 2) if ema20 else 0,
             "ema_gap_pct": round(((ema50 - ema200) / ema200) * 100, 2) if ema200 else 0,
             "rsi": round(rsi, 2),
             "rsi_zone": rsi_zone,
@@ -145,7 +156,76 @@ def get_latest_signals(df: pd.DataFrame) -> Optional[dict]:
         return None
 
 
-def score_signals(signals: dict) -> dict:
+def _classify_pair(pair: str) -> str:
+    if pair in MAJOR_PAIRS:
+        return "major"
+    if pair in VOLATILE_ALT_PAIRS:
+        return "volatile_alt"
+    return "alt"
+
+
+def evaluate_entry_setup(pair: str, signals: dict) -> dict:
+    pair_type = _classify_pair(pair)
+    rsi_min = settings.rsi_entry_min
+    rsi_max = settings.rsi_entry_max_majors if pair_type == "major" else settings.rsi_entry_max
+    volume_min = settings.volume_ratio_min_majors if pair_type == "major" else settings.volume_ratio_min_alts
+    max_extension = (
+        settings.extension_max_distance_pct
+        if pair_type == "major"
+        else settings.extension_max_distance_pct_volatile
+    )
+
+    trend_ok = (
+        signals.get("trend") == "uptrend"
+        and signals.get("price_vs_ema50") == "above"
+        and signals.get("ema20_vs_ema50") == "above"
+    )
+    macd_ok = signals.get("macd_crossover") in {"bullish", "bullish_continuation"}
+
+    rsi = float(signals.get("rsi", 50))
+    rsi_ok = rsi_min <= rsi <= rsi_max
+
+    volume_ratio = float(signals.get("volume_ratio", 0))
+    volume_ok = volume_ratio >= volume_min
+
+    dist_ema20_pct = float(signals.get("dist_ema20_pct", 0))
+    pullback_ok = settings.pullback_min_distance_pct <= dist_ema20_pct <= settings.pullback_max_distance_pct
+    extended = dist_ema20_pct > max_extension
+
+    reasons = []
+    if not trend_ok:
+        reasons.append("trend filter not satisfied")
+    if not macd_ok:
+        reasons.append("MACD not bullish")
+    if not rsi_ok:
+        reasons.append(f"RSI outside {rsi_min:.0f}-{rsi_max:.0f}")
+    if not volume_ok:
+        reasons.append(f"volume ratio below {volume_min:.2f}x")
+    if not pullback_ok:
+        reasons.append("not in pullback entry zone")
+    if extended:
+        reasons.append("price too extended from EMA20")
+
+    eligible = trend_ok and macd_ok and rsi_ok and volume_ok and pullback_ok and not extended
+
+    return {
+        "pair_type": pair_type,
+        "trend_ok": trend_ok,
+        "macd_ok": macd_ok,
+        "rsi_ok": rsi_ok,
+        "volume_ok": volume_ok,
+        "pullback_ok": pullback_ok,
+        "extended": extended,
+        "eligible": eligible,
+        "rsi_min": rsi_min,
+        "rsi_max": rsi_max,
+        "volume_min": volume_min,
+        "max_extension": max_extension,
+        "reasons": reasons,
+    }
+
+
+def score_signals(signals: dict, pair: str = "") -> dict:
     if not signals:
         return {
             "total": 0,
@@ -165,18 +245,22 @@ def score_signals(signals: dict) -> dict:
             },
         }
 
+    entry_setup = signals.get("entry_setup") or evaluate_entry_setup(pair, signals)
+
     ema_score = 0
     if signals.get("trend") == "uptrend":
         ema_score += 15
     if signals.get("price_vs_ema50") == "above":
         ema_score += 10
+    if signals.get("ema20_vs_ema50") == "above":
+        ema_score += 8
 
     rsi = float(signals.get("rsi", 50))
-    if 45 <= rsi <= 65:
+    if entry_setup["rsi_min"] <= rsi <= entry_setup["rsi_max"]:
         rsi_score = 25
-    elif 35 <= rsi < 45 or 65 < rsi <= 72:
+    elif (entry_setup["rsi_min"] - 5) <= rsi < entry_setup["rsi_min"] or entry_setup["rsi_max"] < rsi <= 68:
         rsi_score = 18
-    elif 25 <= rsi < 35 or 72 < rsi <= 80:
+    elif 40 <= rsi < (entry_setup["rsi_min"] - 5) or 68 < rsi <= 72:
         rsi_score = 8
     else:
         rsi_score = 0
@@ -191,16 +275,25 @@ def score_signals(signals: dict) -> dict:
     }.get(macd_state, 0)
 
     volume_ratio = float(signals.get("volume_ratio", 1))
-    if volume_ratio >= 1.5:
+    volume_min = entry_setup["volume_min"]
+    if volume_ratio >= max(1.5, volume_min + 0.3):
         volume_score = 10
-    elif volume_ratio >= 1.1:
+    elif volume_ratio >= max(1.1, volume_min + 0.1):
         volume_score = 7
-    elif volume_ratio >= settings.min_volume_ratio_soft:
+    elif volume_ratio >= volume_min:
         volume_score = 4
     elif volume_ratio >= settings.min_volume_ratio_hard:
         volume_score = 2
     else:
         volume_score = 0
+
+    dist_ema20 = float(signals.get("dist_ema20_pct", 0))
+    if entry_setup["pullback_ok"]:
+        pullback_score = 10
+    elif dist_ema20 <= entry_setup["max_extension"]:
+        pullback_score = 4
+    else:
+        pullback_score = 0
 
     dist_support = float(signals.get("dist_support_pct", 0))
     dist_resistance = float(signals.get("dist_resistance_pct", 0))
@@ -218,19 +311,19 @@ def score_signals(signals: dict) -> dict:
     raw_volume_veto = volume_ratio < settings.min_volume_ratio_hard
     high_volatility = atr_pct >= 4.5
 
-    total = ema_score + rsi_score + macd_score + volume_score + support_resistance_score
+    total = ema_score + rsi_score + macd_score + volume_score + pullback_score + support_resistance_score
     volume_override_candidate = (
         raw_volume_veto
-        and signals.get("trend") == "uptrend"
-        and macd_state in {"bullish", "bullish_continuation"}
-        and 45 <= rsi <= 68
+        and entry_setup["trend_ok"]
+        and entry_setup["macd_ok"]
+        and entry_setup["rsi_ok"]
+        and entry_setup["pullback_ok"]
         and total >= 70
     )
     volume_veto = raw_volume_veto and not volume_override_candidate
     tradeable = (
-        total >= 55
-        and signals.get("trend") == "uptrend"
-        and macd_state in {"bullish", "bullish_continuation"}
+        total >= 60
+        and entry_setup["eligible"]
         and not volume_veto
     )
 
@@ -243,11 +336,13 @@ def score_signals(signals: dict) -> dict:
         "weak_volume": weak_volume,
         "high_volatility": high_volatility,
         "atr_pct": atr_pct,
+        "entry_setup": entry_setup,
         "breakdown": {
             "ema": ema_score,
             "rsi": rsi_score,
             "macd": macd_score,
             "volume": volume_score,
+            "pullback": pullback_score,
             "support_resistance": support_resistance_score,
         },
     }

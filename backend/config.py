@@ -35,6 +35,15 @@ class Settings(BaseSettings):
     startup_trade_enabled: bool = False
     min_volume_ratio_soft: float = 0.8
     min_volume_ratio_hard: float = 0.55
+    rsi_entry_min: float = 48.0
+    rsi_entry_max: float = 62.0
+    rsi_entry_max_majors: float = 65.0
+    volume_ratio_min_majors: float = 0.9
+    volume_ratio_min_alts: float = 1.0
+    pullback_min_distance_pct: float = -0.5
+    pullback_max_distance_pct: float = 2.5
+    extension_max_distance_pct: float = 3.0
+    extension_max_distance_pct_volatile: float = 2.5
     reddit_high_risk_min_hits: int = 2
     reddit_high_risk_min_ratio: float = 0.15
     sentiment_pause_max_fg: int = 40

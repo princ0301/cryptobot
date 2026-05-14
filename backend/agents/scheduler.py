@@ -5,7 +5,13 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from agents.analyzer import calculate_indicators, calculate_trade_levels, get_latest_signals, score_signals
+from agents.analyzer import (
+    calculate_indicators,
+    calculate_trade_levels,
+    evaluate_entry_setup,
+    get_latest_signals,
+    score_signals,
+)
 from agents.executor import (
     get_latest_closed_trade,
     get_open_positions_count,
@@ -33,6 +39,7 @@ latest_scan_snapshot = {
 
 
 def _build_rule_based_hold(signals: dict, scores: dict, sentiment: dict) -> dict | None:
+    entry_setup = scores.get("entry_setup") or signals.get("entry_setup") or {}
     trend = signals.get("trend", "unknown")
     rsi = float(signals.get("rsi", 50))
     macd_state = signals.get("macd_crossover", "none")
@@ -43,16 +50,20 @@ def _build_rule_based_hold(signals: dict, scores: dict, sentiment: dict) -> dict
     pause_trading = bool(sentiment.get("pause_trading"))
 
     favorable_setup = (
-        trend == "uptrend"
-        and bullish_macd
+        entry_setup.get("trend_ok", trend == "uptrend")
+        and entry_setup.get("macd_ok", bullish_macd)
         and total >= 68
-        and rsi <= 68
+        and entry_setup.get("rsi_ok", rsi <= 68)
+        and entry_setup.get("pullback_ok", False)
+        and entry_setup.get("volume_ok", not weak_volume)
+        and not entry_setup.get("extended", False)
         and (not volume_veto or volume_override_candidate)
     )
     caution_setup = (
-        trend == "uptrend"
-        and bullish_macd
+        entry_setup.get("trend_ok", trend == "uptrend")
+        and entry_setup.get("macd_ok", bullish_macd)
         and total >= 60
+        and entry_setup.get("pullback_ok", False)
         and (not volume_veto or volume_override_candidate)
     )
 
@@ -86,6 +97,15 @@ def _build_rule_based_hold(signals: dict, scores: dict, sentiment: dict) -> dict
         reasons.append("effective hard volume veto")
         confidence = min(confidence, 40)
         risk = "high"
+
+    if entry_setup and not entry_setup.get("pullback_ok", True):
+        reasons.append("not in pullback entry zone")
+    if entry_setup and not entry_setup.get("volume_ok", True):
+        reasons.append("volume confirmation too weak")
+    if entry_setup and entry_setup.get("extended", False):
+        reasons.append("price too extended from EMA20")
+    if entry_setup and not entry_setup.get("rsi_ok", True):
+        reasons.append("RSI outside entry range")
 
     if rsi > 72:
         reasons.append("RSI overbought")
@@ -333,7 +353,9 @@ async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dic
             await log_agent_cycle(pair, "SKIPPED", {}, sentiment, {}, current_price, message)
             return "SKIPPED"
 
-        scores = score_signals(signals)
+        entry_setup = evaluate_entry_setup(pair, signals)
+        signals["entry_setup"] = entry_setup
+        scores = score_signals(signals, pair)
         decision = _build_rule_based_hold(signals, scores, sentiment)
         if decision is None:
             decision = await get_trading_decision(
@@ -357,6 +379,12 @@ async def analyze_coin(pair: str, tickers: dict, sentiment: dict, portfolio: dic
         confidence = decision.get("confidence", 0)
         reasoning = decision.get("reasoning", "")
         risk_level = decision.get("risk_assessment", "unknown")
+
+        if action == "BUY" and not scores.get("entry_setup", {}).get("eligible", False):
+            action = "HOLD"
+            entry_reasons = scores["entry_setup"].get("reasons", [])
+            decision["action"] = "HOLD"
+            decision["skip_reason"] = ", ".join(entry_reasons) or "entry criteria not satisfied"
 
         if action == "BUY" and confidence >= settings.min_confidence_threshold:
             if not allow_trading:

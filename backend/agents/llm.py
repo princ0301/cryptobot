@@ -42,6 +42,8 @@ STRICT RULES:
 10. When trend is uptrend, MACD is bullish, total score is strong, RSI is not extreme, and volume is weak but not vetoed, you may still recommend BUY if risk:reward remains favorable.
 11. Do not downgrade an otherwise strong setup to HOLD only because volume is weak when effective hard volume veto is false.
 12. If a raw hard volume veto exists but Volume Override Candidate is true, treat that as a severe caution rather than an automatic rejection.
+13. Prefer trend-pullback entries: BUY only when price is in a healthy pullback zone near EMA20, not when it is stretched far above trend.
+14. Treat "entry criteria not satisfied" as a strong blocker for BUY.
 
 Respond with this exact JSON structure:
 {{
@@ -214,8 +216,10 @@ PRICE: INR {signals.get('price', 0):,.2f}
 
 TECHNICALS
 - Trend: {signals.get('trend', 'unknown')}
-- EMA50/EMA200: {signals.get('ema_50', 0):,.2f} / {signals.get('ema_200', 0):,.2f}
+- EMA20/EMA50/EMA200: {signals.get('ema_20', 0):,.2f} / {signals.get('ema_50', 0):,.2f} / {signals.get('ema_200', 0):,.2f}
 - Price vs EMA50: {signals.get('price_vs_ema50', 'unknown')}
+- EMA20 vs EMA50: {signals.get('ema20_vs_ema50', 'unknown')}
+- Distance from EMA20: {signals.get('dist_ema20_pct', 0):.2f}%
 - RSI: {signals.get('rsi', 50)} ({signals.get('rsi_zone', 'neutral')})
 - MACD: {signals.get('macd_crossover', 'none')} | Hist {signals.get('macd_histogram', 0):.4f}
 - ATR: INR {signals.get('atr', 0):,.2f} ({signals.get('atr_pct', 0):.2f}%)
@@ -232,6 +236,8 @@ SCORES
 - High volatility: {signal_scores.get('high_volatility', False)}
 - Favorable setup: {favorable_setup}
 - Caution setup: {caution_setup}
+- Entry eligible: {signal_scores.get('entry_setup', {}).get('eligible', False)}
+- Entry blockers: {", ".join(signal_scores.get('entry_setup', {}).get('reasons', [])) or "none"}
 
 SENTIMENT
 - Combined: {sentiment.get('combined_score', 50)}/100 ({sentiment.get('sentiment_label', 'Neutral')})
