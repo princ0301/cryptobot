@@ -47,6 +47,7 @@ def _build_rule_based_hold(signals: dict, scores: dict, sentiment: dict) -> dict
     total = int(scores.get("total", 0))
     volume_veto = bool(scores.get("volume_veto"))
     volume_override_candidate = bool(scores.get("volume_override_candidate", False))
+    weak_volume = bool(scores.get("weak_volume", False))
     pause_trading = bool(sentiment.get("pause_trading"))
 
     favorable_setup = (
